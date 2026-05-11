@@ -1,0 +1,1270 @@
+---
+title: "Intégration_données_Seurat"
+author: "Anna Fall"
+date: "2025-07-10"
+output: html_document
+---
+
+# Prétraitement de chaque objet
+```{r}
+library(dplyr)
+#install.packages('Seurat')
+library(Seurat)
+library(patchwork)
+options(future.globals.maxSize = 1e9)
+#install.packages('SeuratObject')
+library(SeuratObject)
+library(magrittr)  # Charger le package
+library(ggplot2)
+
+#install.packages("ragg", dependencies = TRUE)
+#install.packages("pkgdown", dependencies = TRUE)
+#install.packages("devtools", dependencies = TRUE)
+#install.packages("ragg", type = "source")
+
+#install.packages("devtools", dependencies = TRUE)
+
+#install.packages("devtools")
+library(devtools)
+devtools::install_github("satijalab/seurat-data")
+library(SeuratData)
+install.packages("R.utils")
+devtools::install_github("satijalab/seurat-wrappers")
+library(SeuratWrappers)
+#devtools::install_github("satijalab/azimuth")
+#library(Azimuth)  # Ce library peut servir pour l'annotation des types cellulaires avec seurat  
+
+#les matrices sans doublet
+Sys.unsetenv("RENV_PROJECT")
+if ("renv" %in% loadedNamespaces()) unloadNamespace("renv")
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat1_DF.Robj")
+dat1_DF #pour data 1
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat2_DF.Robj")
+dat2_DF
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat3_DF.Robj")
+dat3_DF
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat4_DF.Robj")
+dat4_DF
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat5_DF.Robj")
+dat5_DF
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat6_DF.Robj")
+dat6_DF
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat7_DF.Robj")
+dat7_DF
+load("/home/afall/r_docker/Filtrage_soupx_doubletfinder/dat8_DF.Robj")
+dat8_DF
+
+
+```
+
+# Analyse 2 à 2 de nos échantillons  
+## Filtrage avant intégration 
+# Pour B6_M
+
+
+```{r}
+# objets séparés
+samplesB6M <- list(dat1_DF, dat2_DF)
+samplesB6M
+
+samplesB6M <- lapply(samplesB6M, function(obj) {
+  DefaultAssay(obj) <- "RNA"
+  return(obj)
+})
+samplesB6M
+# Ajouter les étapes nécessaires à chaque objet
+samplesB6M <- lapply(samplesB6M, function(obj) {
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj)
+  obj <- ScaleData(obj)
+  obj <- RunPCA(obj)
+  return(obj)
+})
+samplesB6M
+```
+
+### Intégration des donées
+
+```{r}
+# Trouver les ancres avec RPCA
+anchors <- FindIntegrationAnchors(object.list = samplesB6M,
+                                  anchor.features = 2000, ##### enlever cette partie si possible
+                                  reduction = "rpca",
+                                  dims = 1:30)
+anchors
+# Intégration
+dataB6M <- IntegrateData(anchorset = anchors, dims = 1:30)
+dataB6M
+```
+
+#### Analyse post-intégration
+
+```{r}
+#  Analyse post-intégration
+DefaultAssay(dataB6M) <- "integrated"
+dataB6M <- ScaleData(dataB6M)
+dataB6M <- RunPCA(dataB6M)
+Pl <- DimPlot(dataB6M, group.by = "orig.ident")
+#Pl
+dataB6M
+#ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Intégration_données_après_soupxetdblfind.jpg", plot = Pl, height = 7, width = 7, dpi = 100)
+str(dataB6M)
+head(colnames(dataB6M)) 
+tail(colnames(dataB6M)) 
+table(dataB6M$orig.ident)
+
+```
+
+##### Clustering
+
+```{r}
+dataB6M <- FindNeighbors(dataB6M, dims = 1:30)
+# résolution à 0.5
+
+dataB6M <- FindClusters(dataB6M, resolution = 0.5)
+head(Idents(dataB6M), 5)
+#dir.create("/tmp/RtmpkyLEuY") c'est ce code qui a permit pour que mon ruUmap remarche
+#file.info("/tmp/RtmpkyLEuY") donne les info sur ce dossier (/tmp/RtmpkyLEuY) creer dans le code précedent 
+dataB6M <- RunUMAP(dataB6M, dims = 1:30, seed.use = 42)
+U <- DimPlot(dataB6M, reduction = "umap", group.by = "orig.ident")
+U
+ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Int_UMAP_0,5_par_échantillon_après_soupxetdblfind.jpg", plot = U, height = 7, width = 7, dpi = 100)
+# Umap annoté par cluster 
+plotU<- DimPlot(dataB6M, reduction="umap", label=TRUE, pt.size=0.5)
+plotU
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_B6M_res05.jpg", plot = plotU, height = 7, width = 7, dpi = 100)
+
+# résolution à 0.05
+
+dataB6M <- FindClusters(dataB6M, resolution = 0.05)
+head(Idents(dataB6M), 5)
+dataB6M <- RunUMAP(dataB6M, dims = 1:30, seed.use = 42)
+# Umap annoté par cluster 
+plotU1<- DimPlot(dataB6M, reduction="umap", label=TRUE, pt.size=0.5)
+plotU1
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_B6M.jpg", plot = plotU1, height = 7, width = 7, dpi = 100)
+
+plot2EMK<- DimPlot(dataB6M, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataB6M, expression = orig.ident == "B6_M_KI")
+        ), 
+        cols.highlight = c("green"), 
+        cols = "gray")
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_B6_M_KI.jpg", plot = plot2EMK, height = 7, width = 7, dpi = 100)
+
+plot2EMW<- DimPlot(dataB6M, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataB6M, expression = orig.ident == "B6_M_WT")
+        ), 
+        cols.highlight = c("yellow"), 
+        cols = "gray")
+plot2EMW
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_B6_M_WT.jpg", plot = plot2EMW, height = 7, width = 7, dpi = 100)
+
+
+# Nombre de noyaux par cluster et par conditions
+colnames(dataB6M@meta.data)
+T6 <- table(dataB6M@meta.data$seurat_clusters,
+            dataB6M@meta.data$orig.ident)
+T6
+T6_pct <- prop.table(T6, margin = 2)
+T6_pct
+df_n   <- as.data.frame.matrix(T6)
+df_pct <- as.data.frame.matrix(T6_pct)
+T_final <- data.frame(
+  Cluster = rownames(df_n)
+)
+
+for (cond in colnames(df_n)) {
+  T_final[[paste0(cond, "_n")]]   <- df_n[[cond]]
+  T_final[[paste0(cond, "_pct")]] <- df_pct[[cond]]
+}
+
+T_final
+colSums(df_pct)
+
+write.xlsx(T_final,
+          file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_01_2026/Noyaux_pourcentage_par_cluster_et_par_condition_Bl6_KIvsWT_res005.xlsx",
+         rowNames = FALSE)
+# Calcul du pourcentage par ligne: c'est à dire our chaque cluster par condition
+T6_pct_cluster <- prop.table(T6, margin = 1)
+df_n   <- as.data.frame.matrix(T6)
+df_pct <- as.data.frame.matrix(T6_pct_cluster)
+T_final_cluster <- data.frame(
+  Cluster = rownames(df_n)
+)
+
+for (cond in colnames(df_n)) {
+  T_final_cluster[[paste0(cond, "_n")]]   <- df_n[[cond]]
+  T_final_cluster[[paste0(cond, "_pct")]] <- df_pct[[cond]]
+}
+T_final_cluster
+write.xlsx(T_final_cluster,
+          file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_01_2026/Pourcentage_par_cluster_et_par_condition_Bl6_KIvsWT_res005.xlsx",
+         rowNames = FALSE)
+```
+###### Extraction des gènes marqueurs
+
+```{r}
+Idents(dataB6M) <- "integrated_snn_res.0.5" # ce code permet de passer d'une résolution à un autre en faisant juste l'affectation à idents de la résolution dans laquelle on veut se placer
+levels(Idents(dataB6M))
+library(openxlsx)
+Assays(dataB6M) # Voir les assays présents dans nos données
+DefaultAssay(dataB6M)  # voir sur lequel on travail actuellement
+Layers(dataB6M[["RNA"]]) # Voir les layers dans l’assay RNA
+# Explication
+#DefaultAssay(dataB6M) <- "RNA"       # On fait ce code ( ou on par sur l'assay RNA) si on veut extraire les DEGs, les expressions brutes
+#DefaultAssay(dataB6M) <- "integrated" # On fait ce code quand on veut faire du clustering ou UMAP parce que l'assay integrated conteint les données corrigés sans batch effect 
+
+# Donc pour l'extraction des DEGs :
+DefaultAssay(dataB6M) <- "RNA" # on va d'abord sur l'assay RNA 
+dataB6M[["RNA"]] <- JoinLayers(dataB6M[["RNA"]])  #  VU QU'IL y'a plusieurs layers des counts et data alors on les combinent pour n'obténier qu'un data et un counts
+Layers(dataB6M[["RNA"]])
+# Créer une fonction pour extraire les gènes marqueurs de tous les clusters et enregistrer le fichier Excel
+find_all_markers <- function(dataB6M) {
+  clusters <- unique(dataB6M$seurat_clusters)  # Liste des clusters dans l'échantillon
+  clusters <- sort(clusters)  # Trier les clusters dans l'ordre croissant
+  all_markers <- data.frame()  # DataFrame vide pour stocker les résultats
+  
+  for (cluster in clusters) {
+    cat("Traitement du cluster", cluster, "\n")
+    
+    # Identifier les gènes marqueurs pour chaque cluster
+    markers <- FindMarkers(dataB6M, ident.1 = cluster, min.pct = 0.25)
+    
+    # Extraire les gènes les plus exprimés (ici 50 premiers)
+    top_genes <- markers %>%
+      arrange(desc(avg_log2FC)) %>%
+      head(n = 50)
+    
+    # Ajouter les gènes marqueurs dans une colonne spécifique pour ce cluster
+    cluster_genes <- rownames(top_genes)
+    
+    # Si c'est la première itération, on initialise la dataframe
+    if (ncol(all_markers) == 0) {
+      all_markers <- data.frame(cluster_genes)
+      colnames(all_markers) <- paste("Cluster", cluster)
+    } else {
+      # Sinon, ajouter les gènes marqueurs pour ce cluster à la colonne existante
+      all_markers <- cbind(all_markers, cluster_genes)
+      colnames(all_markers)[ncol(all_markers)] <- paste("Cluster", cluster)
+    }
+    
+    # Visualiser les gènes marqueurs avec DotPlot et FeaturePlot
+   # DotPlot(data8, features = rownames(top_genes)) + RotatedAxis()
+    #FeaturePlot(data8, features = rownames(top_genes))
+  }
+  # Enregistrer le tableau des gènes marqueurs pour tous les clusters dans un fichier Excel
+  write.xlsx(all_markers, "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Genes_marqueurs_données_B6M_res05.xlsx", row.names = FALSE)
+  
+  # Retourner le tableau avec tous les gènes marqueurs pour tous les clusters
+  return(all_markers)
+}
+
+# Appliquer la fonction à l'objet Seurat 'data8'
+all_markers_list <- find_all_markers(dataB6M)
+
+# Afficher les gènes marqueurs pour tous les clusters
+all_markers_list
+```
+## Changement de résolution 
+```{r}
+colnames(dataB6M@meta.data)  # dans les meta data nous avons bien les différents résolutions réaliséss
+Idents(dataB6M) <- "integrated_snn_res.0.05" # ce code permet de passer d'une résolution à un autre en faisant juste l'affectation à idents de la résolution dans laquelle on veut se placer
+Idents(dataB6M) 
+levels(Idents(dataB6M))
+dataB6M
+```
+
+
+# Les Dot plots
+```{r}
+# Dotplot avec quelques gènes marqueurs connus ( New dotplot avec des nouveaux gènes marqueurs)  
+features<- c("Col1a1", "Dcn", "Pdgfra", "Serpinf1", "Vim",  # Fibroblastes
+             "Tagln",	"Myh11", "Acta2",	"Cnn1",	"Myocd",    # CML
+             "Pecam1", "Cdh5", "Cldn5", "Vwf", "Kdr",       # EC vascular
+             "Prox1", "Flt4", "Pdpn", "Lyve1", "Mmrn1",     # EC Lymphatic
+             "Cd68", "Lyz2", "Cd163", "Mrc1", "Adgre1",     # Monocytes, macrophages
+             "Msln", "Upk3b", "Krt19", "Muc16", "Wt1",      # Mesothelial
+             "Pdgfrb", "Rgs5", "Cspg4", "Des", "Cd3g",      # Pericytes
+             "Ucp1", "Cidea", "Ppargc1a", "Prdm16", "Elovl3", # Brown adipocytes
+             "Cd3e", "Trac", "Cd4", "Cd8a", "Il7r",           # T cell
+             "Cd79a", "Ly6d", "Cd19", "Ms4a1", "Pax5",        # B cell
+             "H2-Ab1", "Flt3", "Itgax", "Cd86",               # Dendritic cells
+             "Kcna1", "Plp1", "Myl1", "Sox10", "Mpz")         # Neural glial cells
+features
+dot <- DotPlot(dataB6M, features = features) + 
+  theme_classic() + #  Fond blanc, sans quadrillage ni bordures. Permet d'enlever les carreaux gris derrière mon image comme nous pouvons les voir dans dotplot1 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
+dot
+# Sauvegarde correcte en PNG
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Dotplot_marqueursB6M_res005.png", plot = dot, width = 12, height = 7, dpi = 300)
+
+```
+
+# Annotation des clusters 
+```{r}
+# res 0.5
+new.cluster.ids <- c("Adipocytes bruns1", "CML/péricytes1", "CML/péricytes2", "CML/péricytes3","Fibroblastes1", "Adipocytes bruns2","Adipocytes/C neurales",  "EC vas1","EC vas2",  "Macrophages","CML/péricytes4","EC vas3", "Fibroblastes2", "EC lymph","Péricytes", "C mésothéliales", "CML", "C neurales")
+# "CMLs" ici ce sont les cellules musculaires striées
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataB6M) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataB6M <- RenameIdents(dataB6M, new.cluster.ids)
+PLOT<- DimPlot(dataB6M, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersB6M_res05_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+# res 0.05
+new.cluster.ids <- c("CML", "Adipocytes bruns", "Fibroblastes", "EC vas", "Adipocytes/C neurales", "Macrophages", "CML/péricytes", "EC vas/lymph", "C mésothéliales", "C neurales")
+# "CMLs" ici ce sont les cellules musculaires striées
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataB6M) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataB6M <- RenameIdents(dataB6M, new.cluster.ids)
+PLOT<- DimPlot(dataB6M, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersB6M_res005_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+```
+
+# Analyses de DEG 
+
+```{r}
+dataB6M$genotype <- ifelse(grepl("WT", dataB6M$orig.ident), "WT", "KI")
+table(dataB6M$genotype)
+Idents(dataB6M) <- "genotype"  
+# Extraction de DEG exprimés entre KI et WT (chez les mâles)
+levels(Idents(dataB6M))
+markers_B6M_KI_vs_WT <- FindMarkers(
+  dataB6M,
+  ident.1 = "KI",
+  ident.2 = "WT",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+head(markers_B6M_KI_vs_WT)
+write.xlsx(markers_B6M_KI_vs_WT,
+             "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/DEG_B6M_KI_vs_WT_new_assayRNA.xlsx",
+             rowNames = TRUE)
+library(ggrepel)
+
+diff_genes <- subset(markers_B6M_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+diff_genes
+diff_genes <- diff_genes[order(abs(diff_genes$avg_log2FC), decreasing = TRUE), ][1:10, ]
+diff_genes
+diff_genes$gene <- rownames(diff_genes)
+
+markers_B6M_KI_vs_WT$gene <- rownames(markers_B6M_KI_vs_WT)
+
+# Création colonne "signification" selon les seuils
+markers_B6M_KI_vs_WT$signification <- "NS"
+markers_B6M_KI_vs_WT$signification[markers_B6M_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_B6M_KI_vs_WT$avg_log2FC > 0.25] <- "Up in KI"
+markers_B6M_KI_vs_WT$signification[markers_B6M_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_B6M_KI_vs_WT$avg_log2FC < -0.25] <- "Up in WT"
+diff_genes$signification <- markers_B6M_KI_vs_WT$signification[rownames(diff_genes)]
+# Tous les points = markers_B6M_KI_vs_WT
+ volcano <- ggplot(markers_B6M_KI_vs_WT, aes(x = avg_log2FC, y = -log10(p_val_adj), color = signification)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  
+  # Annotations = seulement diff_genes
+ geom_text_repel(data = diff_genes, aes(label = gene), size = 3, max.overlaps = 15) +
+  
+  scale_color_manual(values = c("Up in KI" = "red", "Up in WT" = "blue", "NS" = "grey70")) +
+  theme_classic(base_size = 14) +
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(title = "Volcano plot: B6M KI vs WT", x = "log2 Fold Change", y = "-log10(p_adj)")
+ volcano
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/Volcano_B6M_KIvsWT_new_assayRNA.png", plot = volcano, width = 12, height = 7, dpi = 300)
+
+```
+
+###### Analyses de DEG (pathways)
+```{r}
+### PATHWAY
+library(ggplot2)
+#if (!require("BiocManager", quietly = TRUE))
+    #install.packages("BiocManager")
+
+#BiocManager::install("clusterProfiler")
+library(clusterProfiler)
+
+#BiocManager::install("org.Mm.eg.db")
+library(org.Mm.eg.db)
+library(enrichplot)
+library(msigdbr)
+library(fgsea)
+
+# Récupérer la liste de gènes différentiellements exprimés 
+sig <- subset(markers_B6M_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+genes_sym <- rownames(sig) # récupération du symbol des gènes 
+# Conversion des identifiants d'entrée ( ici nous transformons les gènes en indentifiants d'entrée c'est à dire des chiffres)
+conv <- bitr(rownames(markers_B6M_KI_vs_WT), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+genes_or_entrez <- conv$ENTREZID[conv$SYMBOL %in% genes_sym]
+universe_entrez <- conv$ENTREZID
+universe_entrez
+conv 
+genes_or_entrez
+# Enrichment avec l'utilisation de la base de donnée GO
+#ego <- enrichGO(gene = genes_or_entrez,
+                #universe = universe_entrez,
+                #OrgDb = org.Mm.eg.db,
+                #keyType = "ENTREZID",
+                #ont = "BP",
+                #pAdjustMethod = "BH",
+                #pvalueCutoff = 0.2,
+                #qvalueCutoff = 0.5)
+#ego   # avec le code de eco nous n'avons rien trouver parceque les filtres effectués étaient trop strictes
+
+ego_all <- enrichGO(
+  gene = genes_or_entrez,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID",
+  ont = "BP",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+ego_all
+head(ego_all@result)
+
+# Visualisation 
+D <- dotplot(ego_all, showCategory = 1) + ggtitle("GO BP enrichment (B6M KI vs WT)")
+D
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/Dotplot_enrich_B6M_KIvsWT_new_assayRNA.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Enrichment avec l'utilisation de la base de donnée KEGG
+ekegg <- enrichKEGG(gene         = genes_or_entrez,
+                    organism     = "mmu",
+                    pvalueCutoff = 0.05)
+
+ekegg
+head(ekegg@result)
+dotplot(ekegg, showCategory = 9) # showCategory nous permet d'indique le nbre de pathway que nous voulons mettre sur notre dotplot
+D1 <- dotplot(ekegg, showCategory = 9) + ggtitle(" KEGG enrichment (B6M KI vs WT)")
+D1
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/Dotplot_enrich_KEGG_B6M_KIvsWT_new_AssayRNA.png", plot = D1, width = 12, height = 7, dpi = 300)
+
+# Enrichment avec l'utilisation de la base de donnée KEGG
+#BiocManager::install("ReactomePA")
+library(ReactomePA)
+ereact <- enrichPathway(gene = genes_or_entrez, organism="mouse", pvalueCutoff = 0.05, qvalueCutoff = 0.1)
+ereact
+dotplot(ereact, showCategory = 11)
+barplot(ereact, showCategory=11) # 5 ici parce qu'il y a eu que 5 enrichissements
+D2 <- dotplot(ereact, showCategory = 11) + ggtitle(" REACTOME enrichment (B6M KI vs WT)")
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/Dotplot_enrich_REACTOME_B6M_KIvsWT_new_AssayRNA.png", plot = D2, width = 12, height = 7, dpi = 300)
+B <- barplot(ereact, showCategory=11) + ggtitle(" REACTOME enrichment (B6M KI vs WT)")
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/Barplot_enrich_REACTOME_B6M_KIvsWT_new_AssayRNA.png", plot = B, width = 12, height = 7, dpi = 300)
+
+# Exemple GSEA en utilisant msigdbr C2
+m_df <- msigdbr(species = "Mus musculus", category = "C2")
+m_df
+pathways <- split(m_df$gene_symbol, m_df$gs_name)
+pathways
+ranks <- markers_B6M_KI_vs_WT$avg_log2FC
+ranks
+names(ranks) <- rownames(markers_B6M_KI_vs_WT)
+ranks <- sort(ranks, decreasing = TRUE)
+# run fgsea
+fg <- fgsea(pathways = pathways, stats = ranks, nperm = 10000)
+head(fg[order(padj), ])
+# Visualisation
+top_fg <- fg[order(fg$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies
+top_fg
+B1 <- ggplot(top_fg, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea)",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_06_02_2026/Barplot_enrich_GSEA_B6M_KIvsWT_new_AssayRNA.png", plot = B1, width = 12, height = 7, dpi = 300)
+
+```
+
+## Filtrage avant intégration 
+# Pour B6_M_ox
+
+```{r}
+# objets séparés
+samplesB6Mox <- list(dat3_DF, dat4_DF)
+samplesB6Mox
+
+samplesB6Mox <- lapply(samplesB6Mox, function(obj) {
+  DefaultAssay(obj) <- "RNA"
+  return(obj)
+})
+samplesB6Mox
+# Ajouter les étapes nécessaires à chaque objet
+samplesB6Mox <- lapply(samplesB6Mox, function(obj) {
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj)
+  obj <- ScaleData(obj)
+  obj <- RunPCA(obj)
+  return(obj)
+})
+samplesB6Mox
+```
+
+
+### Intégration des donées
+
+```{r}
+# Trouver les ancres avec RPCA
+anchors <- FindIntegrationAnchors(object.list = samplesB6Mox,
+                                  anchor.features = 2000, ##### enlever cette partie si possible
+                                  reduction = "rpca",
+                                  dims = 1:30)
+anchors
+# Intégration
+dataB6Mox <- IntegrateData(anchorset = anchors, dims = 1:30)
+dataB6Mox
+```
+#### Analyse post-intégration
+
+```{r}
+#  Analyse post-intégration
+DefaultAssay(dataB6Mox) <- "integrated"
+dataB6Mox <- ScaleData(dataB6Mox)
+dataB6Mox <- RunPCA(dataB6Mox)
+Pl <- DimPlot(dataB6Mox, group.by = "orig.ident")
+#Pl
+dataB6Mox
+#ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Intégration_données_après_soupxetdblfind.jpg", plot = Pl, height = 7, width = 7, dpi = 100)
+str(dataB6Mox)
+head(colnames(dataB6Mox)) 
+tail(colnames(dataB6Mox)) 
+table(dataB6Mox$orig.ident)
+
+```
+##### Clustering
+
+```{r}
+dataB6Mox <- FindNeighbors(dataB6Mox, dims = 1:30)
+# résolution à 0.5
+
+dataB6Mox <- FindClusters(dataB6Mox, resolution = 0.5)
+head(Idents(dataB6Mox), 5)
+#dir.create("/tmp/RtmpkyLEuY") c'est ce code qui a permit pour que mon ruUmap remarche
+#file.info("/tmp/RtmpkyLEuY") donne les info sur ce dossier (/tmp/RtmpkyLEuY) creer dans le code précedent 
+dataB6Mox <- RunUMAP(dataB6Mox, dims = 1:30, seed.use = 42)
+U <- DimPlot(dataB6Mox, reduction = "umap", group.by = "orig.ident")
+U
+ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Int_UMAP_0,5_par_échantillon_après_soupxetdblfind.jpg", plot = U, height = 7, width = 7, dpi = 100)
+# Umap annoté par cluster 
+plotU<- DimPlot(dataB6Mox, reduction="umap", label=TRUE, pt.size=0.5)
+plotU
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_B6Mox_res05.jpg", plot = plotU, height = 7, width = 7, dpi = 100)
+
+# résolution à 0.05
+
+dataB6Mox <- FindClusters(dataB6Mox, resolution = 0.05)
+head(Idents(dataB6Mox), 5)
+dataB6Mox <- RunUMAP(dataB6Mox, dims = 1:30, seed.use = 42)
+# Umap annoté par cluster 
+plotU1<- DimPlot(dataB6Mox, reduction="umap", label=TRUE, pt.size=0.5)
+plotU1
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_B6Mox_res005.jpg", plot = plotU1, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons males castrés wt et mutés
+plot2EMCK<- DimPlot(dataB6Mox, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataB6Mox, expression = orig.ident == "B6_M_Ox_KI")
+        ), 
+        cols.highlight = c("pink"), 
+        cols = "gray")
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_avec_échantillon_Male_Castré_KI.jpg", plot = plot2EMCK, height = 7, width = 7, dpi = 100)
+
+plot2EMCW <- DimPlot(dataB6Mox, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataB6Mox, expression = orig.ident == "B6_M_Ox_WT")
+        ), 
+        cols.highlight = c("cyan"), 
+        cols = "gray")
+plot2EMCW
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_avec_échantillon_Male_Castré_WT.jpg", plot = plot2EMCW, height = 7, width = 7, dpi = 100)
+
+```
+
+###### Extraction des gènes marqueurs
+
+```{r}
+levels(Idents(dataB6Mox))
+library(openxlsx)
+Assays(dataB6Mox) # Voir les assays présents dans nos données
+DefaultAssay(dataB6Mox)  # voir sur lequel on travail actuellement
+Layers(dataB6Mox[["RNA"]]) # Voir les layers dans l’assay RNA
+# Explication
+#DefaultAssay(dataB6Mox) <- "RNA"       # On fait ce code ( ou on par sur l'assay RNA) si on veut extraire les DEGs, les expressions brutes
+#DefaultAssay(dataB6Mox) <- "integrated" # On fait ce code quand on veut faire du clustering ou UMAP parce que l'assay integrated conteint les données corrigés sans batch effect 
+
+# Donc pour l'extraction des DEGs :
+DefaultAssay(dataB6Mox) <- "RNA" # on va d'abord sur l'assay RNA 
+dataB6Mox[["RNA"]] <- JoinLayers(dataB6Mox[["RNA"]])  #  VU QU'IL y'a plusieurs layers des counts et data alors on les combinent pour n'obténier qu'un data et un counts
+Layers(dataB6Mox[["RNA"]])
+# Créer une fonction pour extraire les gènes marqueurs de tous les clusters et enregistrer le fichier Excel
+find_all_markers <- function(dataB6Mox) {
+  clusters <- unique(dataB6Mox$seurat_clusters)  # Liste des clusters dans l'échantillon
+  clusters <- sort(clusters)  # Trier les clusters dans l'ordre croissant
+  all_markers <- data.frame()  # DataFrame vide pour stocker les résultats
+  
+  for (cluster in clusters) {
+    cat("Traitement du cluster", cluster, "\n")
+    
+    # Identifier les gènes marqueurs pour chaque cluster
+    markers <- FindMarkers(dataB6Mox, ident.1 = cluster, min.pct = 0.25)
+    
+    # Extraire les gènes les plus exprimés (ici 50 premiers)
+    top_genes <- markers %>%
+      arrange(desc(avg_log2FC)) %>%
+      head(n = 50)
+    
+    # Ajouter les gènes marqueurs dans une colonne spécifique pour ce cluster
+    cluster_genes <- rownames(top_genes)
+    
+    # Si c'est la première itération, on initialise la dataframe
+    if (ncol(all_markers) == 0) {
+      all_markers <- data.frame(cluster_genes)
+      colnames(all_markers) <- paste("Cluster", cluster)
+    } else {
+      # Sinon, ajouter les gènes marqueurs pour ce cluster à la colonne existante
+      all_markers <- cbind(all_markers, cluster_genes)
+      colnames(all_markers)[ncol(all_markers)] <- paste("Cluster", cluster)
+    }
+    
+    # Visualiser les gènes marqueurs avec DotPlot et FeaturePlot
+   # DotPlot(data8, features = rownames(top_genes)) + RotatedAxis()
+    #FeaturePlot(data8, features = rownames(top_genes))
+  }
+  # Enregistrer le tableau des gènes marqueurs pour tous les clusters dans un fichier Excel
+  write.xlsx(all_markers, "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Genes_marqueurs_données_B6Mox_res05.xlsx", row.names = FALSE)
+  
+  # Retourner le tableau avec tous les gènes marqueurs pour tous les clusters
+  return(all_markers)
+}
+
+# Appliquer la fonction à l'objet Seurat 'data8'
+all_markers_list <- find_all_markers(dataB6Mox)
+
+# Afficher les gènes marqueurs pour tous les clusters
+all_markers_list
+```
+## Changement de résolution 
+```{r}
+colnames(dataB6M@meta.data)  # dans les meta data nous avons bien les différents résolutions réaliséss
+Idents(dataB6M) <- "integrated_snn_res.0.05" # ce code permet de passer d'une résolution à un autre en faisant juste l'affectation à idents de la résolution dans laquelle on veut se placer
+Idents(dataB6M) 
+levels(Idents(dataB6M))
+```
+
+# Les Dot plots
+```{r}
+# Dotplot avec quelques gènes marqueurs connus ( New dotplot avec des nouveaux gènes marqueurs)  
+features<- c("Col1a1", "Dcn", "Pdgfra", "Serpinf1", "Vim",  # Fibroblastes
+             "Tagln",	"Myh11", "Acta2",	"Cnn1",	"Myocd",    # CML
+             "Pecam1", "Cdh5", "Cldn5", "Vwf", "Kdr",       # EC vascular
+             "Prox1", "Flt4", "Pdpn", "Lyve1", "Mmrn1",     # EC Lymphatic
+             "Cd68", "Lyz2", "Cd163", "Mrc1", "Adgre1",     # Monocytes, macrophages
+             "Msln", "Upk3b", "Krt19", "Muc16", "Wt1",      # Mesothelial
+             "Pdgfrb", "Rgs5", "Cspg4", "Des", "Cd3g",      # Pericytes
+             "Ucp1", "Cidea", "Ppargc1a", "Prdm16", "Elovl3", # Brown adipocytes
+             "Cd3e", "Trac", "Cd4", "Cd8a", "Il7r",           # T cell
+             "Cd79a", "Ly6d", "Cd19", "Ms4a1", "Pax5",        # B cell
+             "H2-Ab1", "Flt3", "Itgax", "Cd86",               # Dendritic cells
+             "Kcna1", "Plp1", "Myl1", "Sox10", "Mpz")         # Neural glial cells
+features
+dot <- DotPlot(dataB6Mox, features = features) + 
+  theme_classic() + #  Fond blanc, sans quadrillage ni bordures. Permet d'enlever les carreaux gris derrière mon image comme nous pouvons les voir dans dotplot1 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
+dot
+# Sauvegarde correcte en PNG
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Dotplot_marqueursB6Mox_res05.png", plot = dot, width = 12, height = 7, dpi = 300)
+
+```
+
+# Annotation des clusters 
+```{r}
+# res 0.5
+new.cluster.ids <- c("Adipocytes bruns1", "CML1", "CML2", "CML3", "Adipocytes/C neurales1", "Fibroblastes1", "EC vas1", "EC vas2",  "Macrophages", "Adipocytes bruns2", "C mésothéliales", "EC vas3", "EC vas/lymph", "CML/péricytes1", "Fibroblastes2", "C neurales1",  "Adipocytes/C neurales2", "T/B cell", "C neurales2", "CML/péricytes2", "CML/péricytes3")
+# "CMLs" ici ce sont les cellules musculaires striées
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataB6Mox) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataB6Mox <- RenameIdents(dataB6Mox, new.cluster.ids)
+PLOT<- DimPlot(dataB6Mox, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersB6Mox_res05_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+# res 0.05
+new.cluster.ids <- c("CML", "Adipocytes bruns", "EC vas", "Fibroblastes", "EC vas/lymph", "Macrophages", "C mésothéliales", "CML/péricytes1", "Péricytes/C neurales", "C neurales", "CML/péricytes2")
+# "CMLs" ici ce sont les cellules musculaires striées
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataB6Mox) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataB6Mox <- RenameIdents(dataB6Mox, new.cluster.ids)
+PLOT<- DimPlot(dataB6Mox, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersB6Mox_res005_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+```
+
+# Analyses de DEG 
+
+```{r}
+dataB6Mox
+dataB6Mox$genotype <- ifelse(grepl("WT", dataB6Mox$orig.ident), "WT", "KI")
+table(dataB6Mox$genotype)
+Idents(dataB6Mox) <- "genotype"  
+# Extraction de DEG exprimés entre KI et WT (chez les mâles)
+levels(Idents(dataB6Mox))
+markers_B6Mox_KI_vs_WT <- FindMarkers(
+  dataB6Mox,
+  ident.1 = "KI",
+  ident.2 = "WT",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+head(markers_B6Mox_KI_vs_WT)
+write.xlsx(markers_B6Mox_KI_vs_WT,
+             "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_19_02_2026/DEG_intégration_2à2/DEG_B6Mox_KI_vs_WT.xlsx",
+             rowNames = TRUE)
+library(ggrepel)
+
+diff_genes <- subset(markers_B6Mox_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+diff_genes
+diff_genes <- diff_genes[order(abs(diff_genes$avg_log2FC), decreasing = TRUE), ][1:10, ]
+diff_genes
+diff_genes$gene <- rownames(diff_genes)
+
+markers_B6Mox_KI_vs_WT$gene <- rownames(markers_B6Mox_KI_vs_WT)
+
+# Création colonne "signification" selon les seuils
+markers_B6Mox_KI_vs_WT$signification <- "NS"
+markers_B6Mox_KI_vs_WT$signification[markers_B6Mox_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_B6Mox_KI_vs_WT$avg_log2FC > 0.25] <- "Up in KI"
+markers_B6Mox_KI_vs_WT$signification[markers_B6Mox_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_B6Mox_KI_vs_WT$avg_log2FC < -0.25] <- "Up in WT"
+diff_genes$signification <- markers_B6Mox_KI_vs_WT$signification[rownames(diff_genes)]
+# Tous les points = markers_B6M_KI_vs_WT
+ volcano1 <- ggplot(markers_B6Mox_KI_vs_WT, aes(x = avg_log2FC, y = -log10(p_val_adj), color = signification)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  
+  # Annotations = seulement diff_genes
+ geom_text_repel(data = diff_genes, aes(label = gene), size = 3, max.overlaps = 15) +
+  
+  scale_color_manual(values = c("Up in KI" = "red", "Up in WT" = "blue", "NS" = "grey70")) +
+  theme_classic(base_size = 14) +
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(title = "Volcano plot: B6Mox KI vs WT", x = "log2 Fold Change", y = "-log10(p_adj)")
+ volcano1
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_19_02_2026/DEG_intégration_2à2/Volcano_B6Mox_KIvsWT.png", plot = volcano1, width = 12, height = 7, dpi = 300)
+
+```
+
+# Analyse 2 à 2 de nos échantillons  
+## Filtrage avant intégration 
+# Pour Balbc_M
+
+```{r}
+# objets séparés
+samplesBalbcM <- list(dat5_DF, dat6_DF)
+samplesBalbcM
+
+samplesBalbcM <- lapply(samplesBalbcM, function(obj) {
+  DefaultAssay(obj) <- "RNA"
+  return(obj)
+})
+samplesBalbcM
+# Ajouter les étapes nécessaires à chaque objet
+samplesBalbcM <- lapply(samplesBalbcM, function(obj) {
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj)
+  obj <- ScaleData(obj)
+  obj <- RunPCA(obj)
+  return(obj)
+})
+samplesBalbcM
+```
+
+
+### Intégration des donées
+
+```{r}
+# Trouver les ancres avec RPCA
+anchors <- FindIntegrationAnchors(object.list = samplesBalbcM,
+                                  anchor.features = 2000, ##### enlever cette partie si possible
+                                  reduction = "rpca",
+                                  dims = 1:30)
+anchors
+# Intégration
+dataB6F <- IntegrateData(anchorset = anchors, dims = 1:30)
+dataB6F
+```
+
+#### Analyse post-intégration
+
+```{r}
+#  Analyse post-intégration
+DefaultAssay(dataBalcM) <- "integrated"
+dataBalcM <- ScaleData(dataBalcM)
+dataBalcM <- RunPCA(dataBalcM)
+Pl <- DimPlot(dataBalcM, group.by = "orig.ident")
+#Pl
+dataBalcM
+#ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Intégration_données_après_soupxetdblfind.jpg", plot = Pl, height = 7, width = 7, dpi = 100)
+str(dataBalcM)
+head(colnames(dataBalcM)) 
+tail(colnames(dataBalcM)) 
+table(dataBalcM$orig.ident)
+
+```
+
+##### Clustering
+
+```{r}
+dataBalcM <- FindNeighbors(dataBalcM, dims = 1:30)
+# résolution à 0.5
+
+dataBalcM <- FindClusters(dataBalcM, resolution = 0.5)
+head(Idents(dataBalcM), 5)
+#dir.create("/tmp/RtmpkyLEuY") c'est ce code qui a permit pour que mon ruUmap remarche
+#file.info("/tmp/RtmpkyLEuY") donne les info sur ce dossier (/tmp/RtmpkyLEuY) creer dans le code précedent 
+dataBalcM <- RunUMAP(dataBalcM, dims = 1:30, seed.use = 42)
+U <- DimPlot(dataBalcM, reduction = "umap", group.by = "orig.ident")
+U
+ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Int_UMAP_0,5_par_échantillon_après_soupxetdblfind.jpg", plot = U, height = 7, width = 7, dpi = 100)
+# Umap annoté par cluster 
+plotU<- DimPlot(dataBalcM, reduction="umap", label=TRUE, pt.size=0.5)
+plotU
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_BalbcM_res05.jpg", plot = plotU, height = 7, width = 7, dpi = 100)
+
+# résolution à 0.05
+
+dataBalcM <- FindClusters(dataBalcM, resolution = 0.05)
+head(Idents(dataBalcM), 5)
+dataBalcM <- RunUMAP(dataBalcM, dims = 1:30, seed.use = 42)
+# Umap annoté par cluster 
+plotU1<- DimPlot(dataBalcM, reduction="umap", label=TRUE, pt.size=0.5)
+plotU1
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_BalbcM_res005.jpg", plot = plotU1, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons males Balbc wt et mutés
+plot2EMBalbcK<- DimPlot(dataBalcM, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataBalcM, expression = orig.ident == "Balbc_M_KI")
+        ), 
+        cols.highlight = c("black"), 
+        cols = "gray")
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_Balbc_M_KI.jpg", plot = plot2EMBalbcK, height = 7, width = 7, dpi = 100)
+
+plot2EMBalbcW<- DimPlot(dataBalcM, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataBalcM, expression = orig.ident == "Balbc_M_WT")
+        ), 
+        cols.highlight = c("brown"), 
+        cols = "gray")
+plot2EMBalbcW
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_Balbc_M_WT.jpg", plot = plot2EMBalbcW, height = 7, width = 7, dpi = 100)
+```
+
+## Changement de résolution 
+```{r}
+colnames(dataBalcM@meta.data)  # dans les meta data nous avons bien les différents résolutions réaliséss
+Idents(dataBalcM) <- "integrated_snn_res.0.5" # ce code permet de passer d'une résolution à un autre en faisant juste l'affectation à idents de la résolution dans laquelle on veut se placer
+Idents(dataBalcM) 
+levels(Idents(dataBalcM))
+```
+
+###### Extraction des gènes marqueurs
+
+```{r}
+levels(Idents(dataBalcM))
+library(openxlsx)
+Assays(dataBalcM) # Voir les assays présents dans nos données
+DefaultAssay(dataBalcM)  # voir sur lequel on travail actuellement
+Layers(dataBalcM[["RNA"]]) # Voir les layers dans l’assay RNA
+# Explication
+#DefaultAssay(dataBalcM) <- "RNA"       # On fait ce code ( ou on par sur l'assay RNA) si on veut extraire les DEGs, les expressions brutes
+#DefaultAssay(dataBalcM) <- "integrated" # On fait ce code quand on veut faire du clustering ou UMAP parce que l'assay integrated conteint les données corrigés sans batch effect 
+
+# Donc pour l'extraction des DEGs :
+DefaultAssay(dataBalcM) <- "RNA" # on va d'abord sur l'assay RNA 
+dataBalcM[["RNA"]] <- JoinLayers(dataBalcM[["RNA"]])  #  VU QU'IL y'a plusieurs layers des counts et data alors on les combinent pour n'obténier qu'un data et un counts
+Layers(dataBalcM[["RNA"]])
+# Créer une fonction pour extraire les gènes marqueurs de tous les clusters et enregistrer le fichier Excel
+find_all_markers <- function(dataBalcM) {
+  clusters <- unique(dataBalcM$seurat_clusters)  # Liste des clusters dans l'échantillon
+  clusters <- sort(clusters)  # Trier les clusters dans l'ordre croissant
+  all_markers <- data.frame()  # DataFrame vide pour stocker les résultats
+  
+  for (cluster in clusters) {
+    cat("Traitement du cluster", cluster, "\n")
+    
+    # Identifier les gènes marqueurs pour chaque cluster
+    markers <- FindMarkers(dataBalcM, ident.1 = cluster, min.pct = 0.25)
+    
+    # Extraire les gènes les plus exprimés (ici 50 premiers)
+    top_genes <- markers %>%
+      arrange(desc(avg_log2FC)) %>%
+      head(n = 50)
+    
+    # Ajouter les gènes marqueurs dans une colonne spécifique pour ce cluster
+    cluster_genes <- rownames(top_genes)
+    
+    # Si c'est la première itération, on initialise la dataframe
+    if (ncol(all_markers) == 0) {
+      all_markers <- data.frame(cluster_genes)
+      colnames(all_markers) <- paste("Cluster", cluster)
+    } else {
+      # Sinon, ajouter les gènes marqueurs pour ce cluster à la colonne existante
+      all_markers <- cbind(all_markers, cluster_genes)
+      colnames(all_markers)[ncol(all_markers)] <- paste("Cluster", cluster)
+    }
+    
+    # Visualiser les gènes marqueurs avec DotPlot et FeaturePlot
+   # DotPlot(data8, features = rownames(top_genes)) + RotatedAxis()
+    #FeaturePlot(data8, features = rownames(top_genes))
+  }
+  # Enregistrer le tableau des gènes marqueurs pour tous les clusters dans un fichier Excel
+  write.xlsx(all_markers, "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Genes_marqueurs_données_BalbcM_res05.xlsx", row.names = FALSE)
+  
+  # Retourner le tableau avec tous les gènes marqueurs pour tous les clusters
+  return(all_markers)
+}
+
+# Appliquer la fonction à l'objet Seurat 'data8'
+all_markers_list <- find_all_markers(dataBalcM)
+
+# Afficher les gènes marqueurs pour tous les clusters
+all_markers_list
+```
+
+# Les Dot plots
+```{r}
+# Dotplot avec quelques gènes marqueurs connus ( New dotplot avec des nouveaux gènes marqueurs)  
+features<- c("Col1a1", "Dcn", "Pdgfra", "Serpinf1", "Vim",  # Fibroblastes
+             "Tagln",	"Myh11", "Acta2",	"Cnn1",	"Myocd",    # CML
+             "Pecam1", "Cdh5", "Cldn5", "Vwf", "Kdr",       # EC vascular
+             "Prox1", "Flt4", "Pdpn", "Lyve1", "Mmrn1",     # EC Lymphatic
+             "Cd68", "Lyz2", "Cd163", "Mrc1", "Adgre1",     # Monocytes, macrophages
+             "Msln", "Upk3b", "Krt19", "Muc16", "Wt1",      # Mesothelial
+             "Pdgfrb", "Rgs5", "Cspg4", "Des", "Cd3g",      # Pericytes
+             "Ucp1", "Cidea", "Ppargc1a", "Prdm16", "Elovl3", # Brown adipocytes
+             "Cd3e", "Trac", "Cd4", "Cd8a", "Il7r",           # T cell
+             "Cd79a", "Ly6d", "Cd19", "Ms4a1", "Pax5",        # B cell
+             "H2-Ab1", "Flt3", "Itgax", "Cd86",               # Dendritic cells
+             "Kcna1", "Plp1", "Myl1", "Sox10", "Mpz")         # Neural glial cells
+features
+dot <- DotPlot(dataBalcM, features = features) + 
+  theme_classic() + #  Fond blanc, sans quadrillage ni bordures. Permet d'enlever les carreaux gris derrière mon image comme nous pouvons les voir dans dotplot1 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
+dot
+# Sauvegarde correcte en PNG
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Dotplot_marqueursBalbcM_res05.png", plot = dot, width = 12, height = 7, dpi = 300)
+
+```
+
+# Annotation des clusters 
+```{r}
+# res 0.5
+new.cluster.ids <- c("CML/péricytes1", "CML/péricytes2", "CML/péricytes3", "Adipocytes/C neurales1", "Fibroblastes",  "EC vas1", "EC vas2", "Adipocytes/C neurales2", "Macrophages/C dendritic",  "EC vas/lymph", "EC vas3", "CML/péricytes4", "Péricytes", "Péricytes/C neurales", "C mésothéliales", "C neurales", "EC vas4", "T cell", "CML/péricytes5", "CML/péricytes6")
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataBalcM) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataBalcM <- RenameIdents(dataBalcM, new.cluster.ids)
+PLOT<- DimPlot(dataBalcM, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersBalbcM_res05_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+# res 0.05
+new.cluster.ids <- c("CML", "Adipocytes/C neurales", "EC vas", "Fibroblastes", "CML/péricytes", "Macrophages", "EC vas/lymph",  "Péricytes/C neurales", "C mésothéliales")
+# "CMLs" ici ce sont les cellules musculaires striées
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataBalcM) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataBalcM <- RenameIdents(dataBalcM, new.cluster.ids)
+PLOT<- DimPlot(dataBalcM, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersBalbcM_res005_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+```
+
+
+# Analyse 2 à 2 de nos échantillons  
+## Filtrage avant intégration 
+# Pour B6_F
+
+
+```{r}
+# objets séparés
+samplesB6F<- list(dat7_DF, dat8_DF)
+samplesB6F
+
+samplesB6F <- lapply(samplesB6F, function(obj) {
+  DefaultAssay(obj) <- "RNA"
+  return(obj)
+})
+samplesB6F
+# Ajouter les étapes nécessaires à chaque objet
+samplesB6F <- lapply(samplesB6F, function(obj) {
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj)
+  obj <- ScaleData(obj)
+  obj <- RunPCA(obj)
+  return(obj)
+})
+samplesB6F
+```
+
+
+### Intégration des donées
+
+```{r}
+# Trouver les ancres avec RPCA
+anchors <- FindIntegrationAnchors(object.list = samplesB6F,
+                                  anchor.features = 2000, ##### enlever cette partie si possible
+                                  reduction = "rpca",
+                                  dims = 1:30)
+anchors
+# Intégration
+dataB6F <- IntegrateData(anchorset = anchors, dims = 1:30)
+dataB6F 
+```
+
+#### Analyse post-intégration
+
+```{r}
+#  Analyse post-intégration
+DefaultAssay(dataB6F ) <- "integrated"
+dataB6F  <- ScaleData(dataB6F )
+dataB6F  <- RunPCA(dataB6F )
+Pl <- DimPlot(dataB6F , group.by = "orig.ident")
+#Pl
+dataB6F 
+#ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Intégration_données_après_soupxetdblfind.jpg", plot = Pl, height = 7, width = 7, dpi = 100)
+str(dataB6F )
+head(colnames(dataB6F )) 
+tail(colnames(dataB6F )) 
+table(dataB6F $orig.ident)
+
+```
+
+##### Clustering
+
+```{r}
+dataB6F  <- FindNeighbors(dataB6F , dims = 1:30)
+# résolution à 0.5
+
+dataB6F  <- FindClusters(dataB6F , resolution = 0.5)
+head(Idents(dataB6F ), 5)
+#dir.create("/tmp/RtmpkyLEuY") c'est ce code qui a permit pour que mon ruUmap remarche
+#file.info("/tmp/RtmpkyLEuY") donne les info sur ce dossier (/tmp/RtmpkyLEuY) creer dans le code précedent 
+dataB6F  <- RunUMAP(dataB6F , dims = 1:30, seed.use = 42)
+U <- DimPlot(dataB6F , reduction = "umap", group.by = "orig.ident")
+U
+ggsave(filename = "/home/rstudio/Analyses_SnRNA_10_2025/Int_UMAP_0,5_par_échantillon_après_soupxetdblfind.jpg", plot = U, height = 7, width = 7, dpi = 100)
+# Umap annoté par cluster 
+plotU<- DimPlot(dataB6F , reduction="umap", label=TRUE, pt.size=0.5)
+plotU
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_B6F_res05.jpg", plot = plotU, height = 7, width = 7, dpi = 100)
+
+# résolution à 0.05
+
+dataB6F  <- FindClusters(dataB6F , resolution = 0.05)
+head(Idents(dataB6F ), 5)
+dataB6F  <- RunUMAP(dataB6F , dims = 1:30, seed.use = 42)
+# Umap annoté par cluster 
+plotU1<- DimPlot(dataB6F , reduction="umap", label=TRUE, pt.size=0.5)
+plotU1
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_par_cluster_B6F_res005.jpg", plot = plotU1, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons Femelles wt et mutés
+plot2EFK<- DimPlot(dataB6F, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataB6F, expression = orig.ident == "B6_F_KI")
+        ), 
+        cols.highlight = c("red"), 
+        cols = "gray")
+plot2EFK
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_B6_F_KI.jpg", plot = plot2EFK, height = 7, width = 7, dpi = 100)
+
+plot2EFW<- DimPlot(dataB6F, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(dataB6F, expression = orig.ident == "B6_F_WT")
+        ), 
+        cols.highlight = c("blue"), 
+        cols = "gray")
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_05_01_2026/UMAP_B6_F_WT.jpg", plot = plot2EFW, height = 7, width = 7, dpi = 100)
+
+```
+
+
+###### Extraction des gènes marqueurs
+
+```{r}
+library(openxlsx)
+Assays(dataB6F ) # Voir les assays présents dans nos données
+DefaultAssay(dataB6F )  # voir sur lequel on travail actuellement
+Layers(dataB6F [["RNA"]]) # Voir les layers dans l’assay RNA
+# Explication
+#DefaultAssay(dataB6F ) <- "RNA"       # On fait ce code ( ou on par sur l'assay RNA) si on veut extraire les DEGs, les expressions brutes
+#DefaultAssay(dataB6F ) <- "integrated" # On fait ce code quand on veut faire du clustering ou UMAP parce que l'assay integrated conteint les données corrigés sans batch effect 
+
+# Donc pour l'extraction des DEGs :
+DefaultAssay(dataB6F) <- "RNA" # on va d'abord sur l'assay RNA 
+dataB6F[["RNA"]] <- JoinLayers(dataB6F[["RNA"]])  #  VU QU'IL y'a plusieurs layers des counts et data alors on les combinent pour n'obténier qu'un data et un counts
+Layers(dataB6F[["RNA"]])
+# Créer une fonction pour extraire les gènes marqueurs de tous les clusters et enregistrer le fichier Excel
+find_all_markers <- function(dataB6F) {
+  clusters <- unique(dataB6F$seurat_clusters)  # Liste des clusters dans l'échantillon
+  clusters <- sort(clusters)  # Trier les clusters dans l'ordre croissant
+  all_markers <- data.frame()  # DataFrame vide pour stocker les résultats
+  
+  for (cluster in clusters) {
+    cat("Traitement du cluster", cluster, "\n")
+    
+    # Identifier les gènes marqueurs pour chaque cluster
+    markers <- FindMarkers(dataB6F, ident.1 = cluster, min.pct = 0.25)
+    
+    # Extraire les gènes les plus exprimés (ici 50 premiers)
+    top_genes <- markers %>%
+      arrange(desc(avg_log2FC)) %>%
+      head(n = 50)
+    
+    # Ajouter les gènes marqueurs dans une colonne spécifique pour ce cluster
+    cluster_genes <- rownames(top_genes)
+    
+    # Si c'est la première itération, on initialise la dataframe
+    if (ncol(all_markers) == 0) {
+      all_markers <- data.frame(cluster_genes)
+      colnames(all_markers) <- paste("Cluster", cluster)
+    } else {
+      # Sinon, ajouter les gènes marqueurs pour ce cluster à la colonne existante
+      all_markers <- cbind(all_markers, cluster_genes)
+      colnames(all_markers)[ncol(all_markers)] <- paste("Cluster", cluster)
+    }
+    
+    # Visualiser les gènes marqueurs avec DotPlot et FeaturePlot
+   # DotPlot(data8, features = rownames(top_genes)) + RotatedAxis()
+    #FeaturePlot(data8, features = rownames(top_genes))
+  }
+  # Enregistrer le tableau des gènes marqueurs pour tous les clusters dans un fichier Excel
+  write.xlsx(all_markers, "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Genes_marqueurs_données_B6F_res05.xlsx", row.names = FALSE)
+  
+  # Retourner le tableau avec tous les gènes marqueurs pour tous les clusters
+  return(all_markers)
+}
+
+# Appliquer la fonction à l'objet Seurat 'data8'
+all_markers_list <- find_all_markers(dataB6F)
+
+ # Afficher les gènes marqueurs pour tous les clusters
+all_markers_list
+
+```
+
+# Les Dot plots
+```{r}
+# Dotplot avec quelques gènes marqueurs connus ( New dotplot avec des nouveaux gènes marqueurs)  
+features<- c("Col1a1", "Dcn", "Pdgfra", "Serpinf1", "Vim",  # Fibroblastes
+             "Tagln",	"Myh11", "Acta2",	"Cnn1",	"Myocd",    # CML
+             "Pecam1", "Cdh5", "Cldn5", "Vwf", "Kdr",       # EC vascular
+             "Prox1", "Flt4", "Pdpn", "Lyve1", "Mmrn1",     # EC Lymphatic
+             "Cd68", "Lyz2", "Cd163", "Mrc1", "Adgre1",     # Monocytes, macrophages
+             "Msln", "Upk3b", "Krt19", "Muc16", "Wt1",      # Mesothelial
+             "Pdgfrb", "Rgs5", "Cspg4", "Des", "Cd3g",      # Pericytes
+             "Ucp1", "Cidea", "Ppargc1a", "Prdm16", "Elovl3", # Brown adipocytes
+             "Cd3e", "Trac", "Cd4", "Cd8a", "Il7r",           # T cell
+             "Cd79a", "Ly6d", "Cd19", "Ms4a1", "Pax5",        # B cell
+             "H2-Ab1", "Flt3", "Itgax", "Cd86",               # Dendritic cells
+             "Kcna1", "Plp1", "Myl1", "Sox10", "Mpz")         # Neural glial cells
+features
+dot <- DotPlot(dataB6F, features = features) + 
+  theme_classic() + #  Fond blanc, sans quadrillage ni bordures. Permet d'enlever les carreaux gris derrière mon image comme nous pouvons les voir dans dotplot1 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
+dot
+# Sauvegarde correcte en PNG
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/Dotplot_marqueursB6F_res05.png", plot = dot, width = 12, height = 7, dpi = 300)
+
+```
+
+# Annotation des clusters 
+```{r}
+# res 0.5
+new.cluster.ids <- c("Adipocytes/C neurales1", "kératinocytes1", "CML/péricytes1", "Fibroblastes1", "CML/péricytes2", "kératinocytes/B cell", "EC vas1",  "Adipocytes/C neurales2", "Adipocytes/C neurales3", "Macrophages", "EC vas2", "EC vas3", "Péricytes/C neurales", "Adipocytes/C neurales4", "CML/péricytes3", "C mésothéliales", "CML/péricytes4", "EC vas/lymph", "kératinocytes2", "C neurales", "Fibroblastes2", "kératinocytes3", "B cell", "CML/péricytes5", "Adipocytes/C neurales5", "CML")
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataB6F) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataB6F <- RenameIdents(dataB6F, new.cluster.ids)
+PLOT<- DimPlot(dataB6F, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersB6F_res05_dotplot.jpg",width = 16, height = 10, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+# res 0.05
+new.cluster.ids <- c("Adipocytes bruns", "CML/péricytes1", "kératinocytes/B cell", "Fibroblastes", "EC vas/lymph", "Macrophages", "Péricytes", "C mésothéliales", "C neurales", "CML/péricytes2")
+# "CMLs" ici ce sont les cellules musculaires striées
+new.cluster.ids
+names(new.cluster.ids) <- levels(dataB6F) 
+names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+dataB6F <- RenameIdents(dataB6F, new.cluster.ids)
+PLOT<- DimPlot(dataB6F, reduction="umap", label = TRUE, pt.size = 0.5)
+PLOT
+ggsave(filename = "/home/afall/r_docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_01_2026/UMAP_Annotation_clustersB6F_res005_dotplot.jpg",width = 12, height = 8, units = "in", dpi = 300)  # (width = 12, height = 8, units = "in", dpi = 300) on met ça ici pourque toutes les écriture sur l'umap soient bien visible.
+
+```
+
+# Analyses de DEG 
+
+```{r}
+dataB6F
+dataB6F$genotype <- ifelse(grepl("WT", dataB6F$orig.ident), "WT", "KI")
+table(dataB6F$genotype)
+Idents(dataB6F) <- "genotype"  
+# Extraction de DEG exprimés entre KI et WT (chez les mâles)
+levels(Idents(dataB6F))
+markers_B6F_KI_vs_WT <- FindMarkers(
+  dataB6F,
+  ident.1 = "KI",
+  ident.2 = "WT",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+head(markers_B6F_KI_vs_WT)
+write.xlsx(markers_B6F_KI_vs_WT,
+             "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_19_02_2026/DEG_intégration_2à2/DEG_B6F_KI_vs_WT.xlsx",
+             rowNames = TRUE)
+library(ggrepel)
+
+diff_genes <- subset(markers_B6F_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+diff_genes
+diff_genes <- diff_genes[order(abs(diff_genes$avg_log2FC), decreasing = TRUE), ][1:10, ]
+diff_genes
+diff_genes$gene <- rownames(diff_genes)
+
+markers_B6F_KI_vs_WT$gene <- rownames(markers_B6F_KI_vs_WT)
+
+# Création colonne "signification" selon les seuils
+markers_B6F_KI_vs_WT$signification <- "NS"
+markers_B6F_KI_vs_WT$signification[markers_B6F_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_B6F_KI_vs_WT$avg_log2FC > 0.25] <- "Up in KI"
+markers_B6F_KI_vs_WT$signification[markers_B6F_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_B6F_KI_vs_WT$avg_log2FC < -0.25] <- "Up in WT"
+diff_genes$signification <- markers_B6F_KI_vs_WT$signification[rownames(diff_genes)]
+# Tous les points = markers_B6M_KI_vs_WT
+ volcano2 <- ggplot(markers_B6F_KI_vs_WT, aes(x = avg_log2FC, y = -log10(p_val_adj), color = signification)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  
+  # Annotations = seulement diff_genes
+ geom_text_repel(data = diff_genes, aes(label = gene), size = 3, max.overlaps = 15) +
+  
+  scale_color_manual(values = c("Up in KI" = "red", "Up in WT" = "blue", "NS" = "grey70")) +
+  theme_classic(base_size = 14) +
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(title = "Volcano plot: B6F KI vs WT", x = "log2 Fold Change", y = "-log10(p_adj)")
+ volcano2
+ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_19_02_2026/DEG_intégration_2à2/Volcano_B6F_KIvsWT.png", plot = volcano2, width = 12, height = 7, dpi = 300)
+
+```
