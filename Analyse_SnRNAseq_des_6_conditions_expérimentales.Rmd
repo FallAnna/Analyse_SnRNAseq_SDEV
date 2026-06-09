@@ -1,0 +1,1514 @@
+---
+title: "Analyse snRNAseq"
+author: "Anna Fall"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+---
+
+# Prétraitement de chaque objet
+```{r}
+library(dplyr)
+#Sys.setenv(USE_BUNDLED_LIBUV = 1) # pour contourner les library que seurat delande lors de l'installation
+#install.packages('fs')
+#install.packages('Seurat')
+#install.packages("remotes")
+library(Seurat)
+packageVersion("Seurat")
+packageVersion("SeuratObject")
+library(patchwork)
+options(future.globals.maxSize = 1e9)
+#install.packages('SeuratObject')
+library(SeuratObject)
+library(magrittr)  # Charger le package
+library(ggplot2)
+
+#install.packages("ragg", dependencies = TRUE)
+#install.packages("pkgdown", dependencies = TRUE)
+#install.packages("devtools", dependencies = TRUE)
+#install.packages("ragg", type = "source")
+
+#install.packages("devtools", dependencies = TRUE)
+
+#install.packages("devtools")
+library(devtools)
+#devtools::install_github("satijalab/seurat-data")
+library(SeuratData)
+#install.packages("R.utils")
+#devtools::install_github("satijalab/seurat-wrappers")
+library(SeuratWrappers)
+#devtools::install_github("satijalab/azimuth")
+#library(Azimuth)  # Ce library peut servir pour l'annotation des types cellulaires avec seurat  
+
+#les matrices sans doublet
+#Sys.unsetenv("RENV_PROJECT")
+#if ("renv" %in% loadedNamespaces()) unloadNamespace("renv")
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat1_DF.Robj")
+dat1_DF #pour data 1
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat2_DF.Robj")
+dat2_DF
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat3_DF.Robj")
+dat3_DF
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat4_DF.Robj")
+dat4_DF
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat5_DF.Robj")
+dat5_DF
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat6_DF.Robj")
+dat6_DF
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat7_DF.Robj")
+dat7_DF
+load("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dat8_DF.Robj")
+dat8_DF
+
+```
+
+## Analyse des données sans les souris Balbc 
+1) Filtrage avant intégration 
+```{r}
+# objets séparés
+samples2 <- list(dat1_DF, dat2_DF, dat3_DF, dat4_DF, dat7_DF, dat8_DF) 
+samples2 <- lapply(samples2, function(obj) {
+  DefaultAssay(obj) <- "RNA"
+  return(obj)
+})
+# Ajouter les étapes nécessaires à chaque objet
+samples2 <- lapply(samples2, function(obj) {
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj)
+  obj <- ScaleData(obj)
+  obj <- RunPCA(obj)
+  return(obj)
+})
+```
+
+2) Intégration des données
+```{r}
+anchors2 <- FindIntegrationAnchors(object.list = samples2,
+                                  anchor.features = 2000,
+                                  reduction = "rpca",
+                                  dims = 1:30)
+
+# Intégration
+data.integrated2 <- IntegrateData(anchorset = anchors2, dims = 1:30)
+
+```
+
+### Analyse post-intégration
+```{r}
+#  Analyse post-intégration
+data.integrated2 <- ScaleData(data.integrated2)
+data.integrated2 <- RunPCA(data.integrated2)
+Pl2 <- DimPlot(data.integrated2, group.by = "orig.ident")
+```
+
+#### Clustering
+```{r}
+data.integrated2 <- FindNeighbors(data.integrated2, dims = 1:30)
+# résolution à 0.5
+data.integrated2 <- FindClusters(data.integrated2, resolution = 0.5)
+#head(Idents(data.integrated2), 5)
+data.integrated2 <- RunUMAP(data.integrated2, dims = 1:30, seed.use = 42)
+U2 <- DimPlot(data.integrated2, reduction = "umap", group.by = "orig.ident")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_0,5_par_échantillon_Sbalbc_après_soupxetdblfind.jpg", plot = U2, height = 7, width = 7, dpi = 100)
+# Umap annoté par cluster 
+plotU2<- DimPlot(data.integrated2, reduction="umap", label=TRUE, pt.size=0.5)
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/res_0.5/UMAP_0,5_par_cluster.jpg", plot = plotU2, height = 7, width = 7, dpi = 100)
+
+# résolution à 0.05
+data.integrated2 <- FindClusters(data.integrated2, resolution = 0.05)
+#head(Idents(data.integrated2), 5)
+data.integrated2 <- RunUMAP(data.integrated2, dims = 1:30, seed.use = 42)
+# Umap annoté par cluster 
+plotU3<- DimPlot(data.integrated2, reduction="umap", label=TRUE, pt.size=0.5)
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_analyse_après_vac_27_03_2026/UMAP_0,05_par_cluster_Sbalbc_dpi300.jpg", plot = plotU3, height = 7, width = 7, dpi = 300)
+#saveRDS(data.integrated2, file="/home/afall/r-docker/Filtrage_soupx_doubletfinder/dataintegrated2_intà6_sBalbc.rds")
+#data.integrated2 <- readRDS("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dataintegrated2_intà6_sBalbc.rds")
+```
+
+1) Extraction de nombre de noyaux par cluster 
+```{r}
+tb <- table(Idents(data.integrated2))
+df <- as.data.frame(tb)
+colnames(df) <- c("Cluster", "Noyaux")
+#write.table(tb, file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Nbre_noyau_par_cluster_Sbalbc.txt",
+           # sep = "\t", quote = FALSE, col.names = NA)
+
+# Créer un graphique avec ggplot2
+p <- ggplot(df, aes(x = Cluster, y = Noyaux)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Nombre de noyaux par cluster",
+       x = "Cluster",
+       y = "Nombre de noyaux")
+
+# Sauvegarder le graphique
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Réprésentation_nbre_noyau_par_cluster_Sbalbc.jpg",
+      # plot = p, height = 7, width = 7, dpi = 100)
+```
+
+##### Extraction des gènes marqueurs
+```{r}
+# Les pré analyses nécessaires avant l'extraction des gènes marqueurs
+library(openxlsx)
+#Assays(data.integrated2) # Voir les assays présents dans nos données
+#DefaultAssay(data.integrated2)  # voir sur lequel on travail actuellement
+#Layers(data.integrated2[["RNA"]]) # Voir les layers dans l’assay RNA
+# Donc pour l'extraction des DEGs :
+DefaultAssay(data.integrated2) <- "RNA" # on va d'abord sur l'assay RNA 
+data.integrated2[["RNA"]] <- JoinLayers(data.integrated2[["RNA"]])  #  VU QU'IL y'a plusieurs layers des counts et data alors on les combinent pour n'obténier qu'un data et un counts
+Layers(data.integrated2[["RNA"]])
+
+# Réinitialisation à des clusters numériques
+Idents(data.integrated2) <- data.integrated2$seurat_clusters  # Au lieu de réprendre les analyses pour avoir l'annotation par chiffre et non l'annotation par types cellulaires, il faut juste faire ce code pour changer l'annotation aux clusters présents dans nos données 
+levels(Idents(data.integrated2))
+#markers <- FindMarkers(data.integrated2, ident.1 = 0)
+#head(markers)
+#head(rownames(markers))
+
+```
+
+```{r}
+#install.packages("tibble")
+library(tibble)
+# Création de onction pour extraire les gènes marqueurs de tous les clusters et enregistrer le fichier Excel
+find_all_markers <- function(data.integrated2) {
+  clusters <- unique(data.integrated2$seurat_clusters)  # Liste des clusters dans l'échantillon
+  clusters <- sort(clusters)  # Trier les clusters dans l'ordre croissant
+  all_markers <- data.frame()  # DataFrame vide pour stocker les résultats
+  
+  for (cluster in clusters) {
+    cat("Traitement du cluster", cluster, "\n")
+    
+    # Identifier les gènes marqueurs pour chaque cluster
+    markers <- FindMarkers(data.integrated2, ident.1 = cluster, min.pct = 0.25)
+    
+    # Extraire les gènes les plus exprimés (ici 50 premiers)
+    top_genes <- markers %>%
+      arrange(desc(avg_log2FC)) %>%
+      head(n = 50)
+    
+    # Ajouter les gènes marqueurs dans une colonne spécifique pour ce cluster
+    cluster_genes <- rownames(top_genes)
+    
+    # Si c'est la première itération, on initialise la dataframe
+    if (ncol(all_markers) == 0) {
+      all_markers <- data.frame(cluster_genes)
+      colnames(all_markers) <- paste("Cluster", cluster)
+    } else {
+      # Sinon, ajouter les gènes marqueurs pour ce cluster à la colonne existante
+      all_markers <- cbind(all_markers, cluster_genes)
+      colnames(all_markers)[ncol(all_markers)] <- paste("Cluster", cluster)
+    }
+    
+  }
+  # Enregistrer le tableau des gènes marqueurs pour tous les clusters dans un fichier Excel
+ # write.xlsx(all_markers, "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_analyse_après_vac_27_03_2026/Genes_marqueurs_données_intà6_sBalbc.xlsx", row.names = FALSE)
+  
+  # Retourner le tableau avec tous les gènes marqueurs pour tous les clusters
+  return(all_markers)
+}
+
+# Appliquer la fonction à l'objet Seurat 'data8'
+all_markers_list <- find_all_markers(data.integrated2)
+
+ 
+# Afficher les gènes marqueurs pour tous les clusters
+#all_markers_list
+
+```
+
+###### UMAP par cluster
+```{r}
+data.integrated2
+# Faire les UMAPs 1 PAR 1 de chaque cluster 
+plotC0<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 0" = WhichCells(data.integrated2, expression = seurat_clusters == "0")
+        ), 
+        cols.highlight = c("red"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster0_SBalbc_après_soupxetdblfind.jpg", plot = plotC0, height = 7, width = 7, dpi = 100)
+
+plotC1 <- DimPlot(data.integrated2, reduction = "umap", 
+  cells.highlight = list("Cluster 1" = WhichCells(data.integrated2, expression = seurat_clusters == "1")),
+  cols.highlight = c("brown"), 
+  cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster1_SBalbc_après_soupxetdblfind.jpg", plot = plotC1, height = 7, width = 7, dpi = 100)
+
+plotC2 <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 2" = WhichCells(data.integrated2, expression = seurat_clusters == "2")
+        ), 
+        cols.highlight = c("blue"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster2_SBalbc_après_soupxetdblfind.jpg", plot = plotC2, height = 7, width = 7, dpi = 100)
+
+plotC3 <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 3" = WhichCells(data.integrated2, expression = seurat_clusters == "3")
+        ), 
+        cols.highlight = c("green"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster3_SBalbc_après_soupxetdblfind.jpg", plot = plotC3, height = 7, width = 7, dpi = 100)
+
+plotC4<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+         "Cluster 4" = WhichCells(data.integrated2, expression = seurat_clusters == "4")
+        ), 
+        cols.highlight = c("yellow"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster4_SBalbc_après_soupxetdblfind.jpg", plot = plotC4, height = 7, width = 7, dpi = 100)
+
+plotC5<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 5" = WhichCells(data.integrated2, expression = seurat_clusters == "5")
+        ), 
+        cols.highlight = c("pink"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster5_SBalbc_après_soupxetdblfind.jpg", plot = plotC5, height = 7, width = 7, dpi = 100)
+
+plotC6 <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 6" = WhichCells(data.integrated2, expression = seurat_clusters == "6")
+        ), 
+        cols.highlight = c("orange"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster6_SBalbc_après_soupxetdblfind.jpg", plot = plotC6, height = 7, width = 7, dpi = 100)
+
+plotC7<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 7" = WhichCells(data.integrated2, expression = seurat_clusters == "7")
+        ), 
+        cols.highlight = c("black"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster7_SBalbc_après_soupxetdblfind.jpg", plot = plotC7, height = 7, width = 7, dpi = 100)
+
+plotC8<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 8" = WhichCells(data.integrated2, expression = seurat_clusters == "8")
+        ), 
+        cols.highlight = c("salmon"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster8_SBalbc_après_soupxetdblfind.jpg", plot = plotC8, height = 7, width = 7, dpi = 100)
+
+plotC9 <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 9" = WhichCells(data.integrated2, expression = seurat_clusters == "9")
+        ), 
+        cols.highlight = c("darkgreen"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster9_SBalbc_après_soupxetdblfind.jpg", plot = plotC9, height = 7, width = 7, dpi = 100)
+
+plotC10 <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          "Cluster 10" = WhichCells(data.integrated2, expression = seurat_clusters == "10")
+        ), 
+        cols.highlight = c("lightgreen"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Int_UMAP_Cluster10_SBalbc_après_soupxetdblfind.jpg", plot = plotC10, height = 7, width = 7, dpi = 100)
+
+# Les umap par échantillons 
+# plot des Echantillons Femelles wt et mutés
+plot2EFK<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_F_KI")
+        ), 
+        cols.highlight = c("red"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_02_2026/UMAP_avec_échantillon_Femelle_KI_intégrationà6_new.jpg", plot = plot2EFK, height = 7, width = 7, dpi = 100)
+
+plot2EFW<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_F_WT")
+        ), 
+        cols.highlight = c("blue"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_02_2026/UMAP_avec_échantillon_Femelle_WT_intégrationà6_new.jpg", plot = plot2EFW, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons males wt et mutés
+plot2EMK<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_KI")
+        ), 
+        cols.highlight = c("green"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_02_2026/UMAP_avec_échantillons_Males_KI_intégrationà6_new.jpg", plot = plot2EMK, height = 7, width = 7, dpi = 100)
+
+plot2EMW<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_WT")
+        ), 
+        cols.highlight = c("yellow"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_02_2026/UMAP_avec_échantillons_Males_WT_intégrationà6_new.jpg", plot = plot2EMW, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons males castrés wt et mutés
+plot2EMCK<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_KI")
+        ), 
+        cols.highlight = c("pink"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_02_2026/UMAP_avec_échantillon_Male_Castré_KI_intégrationà6_new.jpg", plot = plot2EMCK, height = 7, width = 7, dpi = 100)
+
+plot2EMCW <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_WT")
+        ), 
+        cols.highlight = c("orange"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_26_02_2026/UMAP_avec_échantillon_Male_Castré_WT_intégrationà6_new.jpg", plot = plot2EMCW, height = 7, width = 7, dpi = 100)
+```
+
+####### UMAP par conditions et avec toutes les conditions c'est à dire les 6 échantillons sans les balbc 
+```{r}
+# Faire les UMAPs 2 PAR 2
+# plot des 2 Echantillons Femelles wt et mutés
+plot2EF<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_F_KI"),
+          WhichCells(data.integrated2, expression = orig.ident == "B6_F_WT")
+        ), 
+        cols.highlight = c("red", "blue"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_les_échantillons_Femelles.jpg", plot = plot2EF, height = 7, width = 7, dpi = 100)
+
+# plot des 2 Echantillons males wt et mutés
+plot2EM<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_KI"),
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_WT")
+        ), 
+        cols.highlight = c("red", "blue"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_les_échantillons_Males.jpg", plot = plot2EM, height = 7, width = 7, dpi = 100)
+
+# plot des 2 Echantillons males castrés wt et mutés
+plot2EMC<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_KI"),
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_WT")
+        ), 
+        cols.highlight = c("red", "blue"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_les_échantillons_Males_Castrés.jpg", plot = plot2EMC, height = 7, width = 7, dpi = 100)
+
+# Faire les UMAPs 1 PAR 1
+# plot des Echantillons Femelles wt et mutés
+plot2EFK<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_F_KI")
+        ), 
+        cols.highlight = c("red"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_échantillon_Femelle_KI_SBalbc_res0.05.jpg", plot = plot2EFK, height = 7, width = 7, dpi = 100)
+
+plot2EFW<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_F_WT")
+        ), 
+        cols.highlight = c("blue"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_échantillon_Femelle_WT_SBalbc_res0.05.jpg", plot = plot2EFW, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons males wt et mutés
+plot2EMK<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_KI")
+        ), 
+        cols.highlight = c("green"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_échantillons_Males_KI_SBalbc_res0.05.jpg", plot = plot2EMK, height = 7, width = 7, dpi = 100)
+
+plot2EMW<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_WT")
+        ), 
+        cols.highlight = c("yellow"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_échantillons_Males_WT_SBalbc_res0.05.jpg", plot = plot2EMW, height = 7, width = 7, dpi = 100)
+
+# plot des Echantillons males castrés wt et mutés
+plot2EMCK<- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_KI")
+        ), 
+        cols.highlight = c("pink"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_échantillon_Male_Castré_KI_SBalbc_res0.05.jpg", plot = plot2EMCK, height = 7, width = 7, dpi = 100)
+
+plot2EMCW <- DimPlot(data.integrated2, reduction = "umap", 
+        cells.highlight = list(
+          WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_WT")
+        ), 
+        cols.highlight = c("orange"), 
+        cols = "gray")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/UMAP_avec_échantillon_Male_Castré_WT_SBalbc_res0.05.jpg", plot = plot2EMCW, height = 7, width = 7, dpi = 100)
+
+```
+
+######## Annotation des clusters 
+```{r}
+new.cluster.ids <- c("Vascular smooth muscle cells", "Metabolically active cells", "Endothelial cells", "Fibroblasts", "Epithelial cells", "Macrophages", "Skeletal smooth muscle cells", "Mesothelial cells", "Lymphatic endothelial cells", "Pericytes", "Glial cells", "Lymphocytes")
+names(new.cluster.ids) <- levels(data.integrated2) 
+#names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
+data.integrated2 <- RenameIdents(data.integrated2, new.cluster.ids)
+#PLOT<- DimPlot(data.integrated2, reduction="umap", label = FALSE, pt.size = 0.5)
+#PLOT
+# La nouvelle commande de plot qui suit sert à center mon umap
+PLOT <- DimPlot(data.integrated2, reduction = "umap", label = FALSE, pt.size = 0.5) + 
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Umap_au_bon_format_pour_l'article_et_Umap_avecMacro_et_lymphocytes/Annotation_clusters_intà6_Anglais_avec_Macro_lymphocytes.jpg", plot = PLOT, height = 7, width = 7, dpi = 300)
+# Umap par type cellulaire
+library(ggplot2)
+
+# Exemple : définir des couleurs pour chaque cluster
+cluster_colors <- c(
+  "Fibroblastes" = "#1f77b4",   # bleu
+  "EC" = "#ff7f0e",             # orange
+  "CML" = "#2ca02c",            # vert
+  "Kératinocytes" = "#d62728",  # rouge
+  "Macrophages" = "#9467bd",    # violet
+  "CMLs" = "#8c564b",           # marron
+  "C Mésothéliales" = "#e377c2",# rose
+  "C gliales" = "#7f7f7f",      # gris
+  "Lymphocytes B" = "#bcbd22"   # jaune-vert
+  # Ajoute les autres clusters si besoin
+)
+clusters <- levels(Idents(data.integrated2))  # noms des clusters renommés
+
+for (clust in clusters) {
+  # Créer le plot en mettant en surbrillance les cellules du cluster avec leur couleur dédiée
+  p <- DimPlot(data.integrated2, reduction = "umap", 
+               cells.highlight = WhichCells(data.integrated2, idents = clust),
+               cols.highlight = cluster_colors[clust],  # couleur pour le cluster mis en valeur
+               cols = "grey80") +                      # couleur des autres points (gris clair)
+    ggtitle(paste("UMAP - Cluster:", clust)) +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p)
+  
+  # Enregistrer le plot dans un fichier PNG (nom avec le cluster)
+ ggsave(filename = paste0("Int_après_soupxetdblfind_UMAP_Sbalbc_cluster_", clust, ".png"), plot = p, width = 6, height = 5)
+}
+```
+
+######### Enlever des populations cellulaires sur l'umap global
+```{r}
+cells_to_keep <- WhichCells(
+ data.integrated2, 
+  idents = setdiff(levels(Idents(data.integrated2)), 
+                   c("Metabolically active cells", "Epithelial cells", "Skeletal smooth muscle cells"))
+)
+Pnew <- DimPlot(data.integrated2, cells = cells_to_keep, label = FALSE, pt.size = 0.5)+ 
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/Umap_annoté_intà6_sans_clusters_1,4,6_anglais_new.jpg", plot = Pnew, height = 7, width = 7, dpi = 300)
+
+#ggsave(
+  #filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/Umap_annote_intà6_sans_clusters_1_4_6_anglais_new.tiff",
+ # plot = Pnew,
+ # height = 7,
+  #width = 7,
+ # dpi = 300
+#)
+
+#ggsave(
+  #filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/Umap_annote_intà6_sans_clusters_1_4_6_anglais_new1.tiff",
+  #plot = Pnew,
+  #width = 7,
+  #height = 7,
+  #dpi = 600,
+ # compression = "lzw"
+#)
+
+# Les umap par échantillons après avoir enlever les 3 populations cellulaires 
+# plot des Echantillons Femelles wt et mutés
+plot2EFK <- DimPlot(data.integrated2, reduction = "umap",
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_F_KI"),
+  cols.highlight = "red",
+  cols = "gray", + 
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+)
+# Avec le + coord_fixed() c'est pour bien centrer tous les images et que toutes apparaissent pareils 
+plot2EFK <- DimPlot(
+  data.integrated2,
+  reduction = "umap",
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_F_KI"),
+  cols.highlight = "red",
+  cols = "gray"
+) +
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/UMAP_avec_échantillon_Femelle_KI_intà6_Sansclusters1,4,6_new.jpg", plot = plot2EFK, height = 7, width = 7, dpi = 300)
+
+plot2EFW<- DimPlot(data.integrated2, reduction = "umap", 
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_F_WT"),
+        cols.highlight = c("blue"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/UMAP_avec_échantillon_Femelle_WT_intà6_Sansclusters1,4,6_new.jpg", plot = plot2EFW, height = 7, width = 7, dpi = 300)
+
+# plot des Echantillons males wt et mutés
+plot2EMK<- DimPlot(data.integrated2, reduction = "umap", 
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_M_KI"), 
+        cols.highlight = c("green"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/UMAP_avec_échantillons_Males_KI_intà6_Sansclusters1,4,6_new.jpg", plot = plot2EMK, height = 7, width = 7, dpi = 300)
+
+plot2EMW<- DimPlot(data.integrated2, reduction = "umap", 
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_M_WT"), 
+        cols.highlight = c("yellow"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/UMAP_avec_échantillons_Males_WT_intà6_Sansclusters1,4,6_new.jpg", plot = plot2EMW, height = 7, width = 7, dpi = 300)
+
+# plot des Echantillons males castrés wt et mutés
+plot2EMCK<- DimPlot(data.integrated2, reduction = "umap", 
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_KI"), 
+        cols.highlight = c("pink"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/UMAP_avec_échantillon_Male_Castré_KI_intà6_Sansclusters1,4,6_new.jpg", plot = plot2EMCK, height = 7, width = 7, dpi = 300)
+
+plot2EMCW <- DimPlot(data.integrated2, reduction = "umap", 
+  cells = cells_to_keep,
+  cells.highlight = WhichCells(data.integrated2, expression = orig.ident == "B6_M_Ox_WT"),
+        cols.highlight = c("orange"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_16_04_2026/UMAP_avec_échantillon_Male_Castré_WT_intà6_Sansclusters1,4,6_new.jpg", plot = plot2EMCW, height = 7, width = 7, dpi = 300)
+```
+
+########## Dot plot sans les adipocytes, CMLs et cellules épithéliales: création d'un autre metadata qu'on utilisera dans la suite de nos analyses 
+```{r}
+DefaultAssay(data.integrated2) <- "RNA"
+# Création d'un data sans les clusters 1,4 et 6
+data.filtered <- subset(
+  data.integrated2,
+  idents = setdiff(
+    levels(Idents(data.integrated2)),
+    c("1", "4", "6")
+  )
+)
+Idents(data.filtered)="celltype"
+features<- c("Clec3b",	"Cygb",	"Dcn", "Gsn", "Pi16", "Acta2",	"Cnn1", "Flna", "Myh11", "Tagln", "Cdh5", "Cldn5", "Esam", "Pecam1", "Vwf", "Flt4", "Mmrn1", "Prox1", "C1qa", "Cd74", "H2-Ab1", "Lyz2", "Ptprc", "Kcnj8", "Notch3", "Rgs5", "Msln", "Wt1", "Gfra3", "Plp1", "Sox10")
+dot <- DotPlot(data.filtered, features = features) + 
+  theme_classic() + #  Fond blanc, sans quadrillage ni bordures. Permet d'enlever les carreaux gris derrière mon image comme nous pouvons les voir dans dotplot1 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
+# Sauvegarde correcte en PNG
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_analyse_après_vac_27_03_2026/New2_Dotplot_marqueurs_intà6.tiff", plot = dot, width = 12, height = 7, dpi = 300)
+#saveRDS(data.filtered, file="/home/afall/r-docker/Filtrage_soupx_doubletfinder/datafiltered_sanscluster146.rds")
+#data.filtered <- readRDS("/home/afall/r-docker/Filtrage_soupx_doubletfinder/datafiltered_sanscluster146.rds")
+```
+
+########### Analyse de la population des CML de l'ensemble des 6 échantillons 
+```{r}
+# Extraction des types cellulaires présentent dans data.integrated2
+data.integrated2$celltype <- Idents(data.integrated2)
+table(data.integrated2$celltype)
+celltype_of_interest <- c("Vascular smooth muscle cells")
+data_CML_intà6 <- subset(data.integrated2, subset = celltype == celltype_of_interest)
+## Réclustering des clusters des CML
+DefaultAssay(data_CML_intà6) <- "integrated" 
+data_CML_intà6 <- ScaleData(data_CML_intà6) # après extraction d'une population cellulaire commencer les analyses à partir de là au lieu du findneighbors directement 
+data_CML_intà6 <- RunPCA(data_CML_intà6)
+data_CML_intà6 <- FindNeighbors(data_CML_intà6, dims = 1:10 ) # ici on met la dimension de 1:10 au lieu de 1:30 parcequ' ici nous avons que la population de CML donc pas une grande variabilité comparé à quand nous faisons tous les types cellulaires en meme temps
+# résolution à 0.5
+data_CML_intà6 <- FindClusters(data_CML_intà6, resolution = 0.2) # res à 0.2 afin d'avoir nos 6 clusters chez les CMLs 
+#head(Idents(data_CML_intà6), 5)
+data_CML_intà6 <- RunUMAP(data_CML_intà6, dims = 1:10, seed.use = 42)
+#DefaultAssay(data_CML_intà6)
+# Les Umaps
+plotCML<- DimPlot(data_CML_intà6, reduction="umap", label=TRUE, pt.size=0.5) + 
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/Umap_CML_intà6_res008_apresPCA.jpg", plot = plotCML, height = 7, width = 7, dpi = 100)
+
+# Extraction des marqueurs des CML à la res 0.5
+library(openxlsx)
+#Assays(data_CML_intà6) 
+#DefaultAssay(data_CML_intà6) 
+
+# Pour l'extraction des DEGs :
+DefaultAssay(data_CML_intà6) <- "RNA"
+data_CML_intà6[["RNA"]] <- JoinLayers(data_CML_intà6[["RNA"]]) 
+#Layers(data_CML_intà6[["RNA"]])
+
+unique(data_CML_intà6$seurat_clusters)
+
+find_all_markers <- function(data_CML_intà6) {
+  clusters <- unique(data_CML_intà6$seurat_clusters)  # Liste des clusters dans l'échantillon
+  clusters <- sort(clusters)  # Trier les clusters dans l'ordre croissant
+  all_markers <- data.frame()  # DataFrame vide pour stocker les résultats
+  
+  for (cluster in clusters) {
+    cat("Traitement du cluster", cluster, "\n")
+    
+    # Identifier les gènes marqueurs pour chaque cluster
+    markers <- FindMarkers(data_CML_intà6, ident.1 = cluster, min.pct = 0.25)
+    
+    # Extraire les gènes les plus exprimés (ici 50 premiers)
+    top_genes <- markers %>%
+      arrange(desc(avg_log2FC)) %>%
+      head(n = 50)
+    
+    # Ajouter les gènes marqueurs dans une colonne spécifique pour ce cluster
+    cluster_genes <- rownames(top_genes)
+    
+    # Si c'est la première itération, on initialise la dataframe
+    if (ncol(all_markers) == 0) {
+      all_markers <- data.frame(cluster_genes)
+      colnames(all_markers) <- paste("Cluster", cluster)
+    } else {
+      # Sinon, ajouter les gènes marqueurs pour ce cluster à la colonne existante
+      all_markers <- cbind(all_markers, cluster_genes)
+      colnames(all_markers)[ncol(all_markers)] <- paste("Cluster", cluster)
+    }
+    
+  }
+  # Enregistrer le tableau des gènes marqueurs pour tous les clusters dans un fichier Excel
+ # write.xlsx(all_markers, "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/Genes_marqueurs_CML_res02_apresPCA.xlsx", row.names = FALSE)
+  
+  # Retourner le tableau avec tous les gènes marqueurs pour tous les clusters
+  return(all_markers)
+}
+all_markers_list <- find_all_markers(data_CML_intà6)
+
+### Nbre de noyau par cluster et par condition expérimentale
+
+colnames(data_CML_intà6@meta.data)
+T3 <- table(data_CML_intà6@meta.data$seurat_clusters,
+            data_CML_intà6@meta.data$orig.ident)
+df3 <- as.data.frame.matrix(T3)  
+df3 <- tibble::rownames_to_column(df3, var = "Cluster")
+#write.xlsx(df3,
+         # file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/Noyaux_par_cluster_et_par_condition_res02_CML_aprèsPCA.xlsx",
+         # rowNames = FALSE)
+
+# Nombre et pourcentage de noyaux par cluster et par conditions
+T4 <- table(data_CML_intà6@meta.data$seurat_clusters,
+            data_CML_intà6@meta.data$orig.ident)
+T4_pct <- prop.table(T4, margin = 2)
+df_n   <- as.data.frame.matrix(T4)
+df_pct <- as.data.frame.matrix(T4_pct)
+T_final <- data.frame(
+  Cluster = rownames(df_n)
+)
+
+for (cond in colnames(df_n)) {
+  T_final[[paste0(cond, "_n")]]   <- df_n[[cond]]
+  T_final[[paste0(cond, "_pct")]] <- df_pct[[cond]]
+}
+#colSums(df_pct)
+#write.xlsx(T_final,
+         # file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/Nbre_et_pourcentage_de_noyaux_par_cluster_et_par_condition_CML_res02_aprèsPCA.xlsx",
+         #rowNames = FALSE)
+
+# résolution à 0.05
+DefaultAssay(data_CML_intà6) <- "integrated"
+data_CML_intà6 <- FindNeighbors(data_CML_intà6, dims = 1:10)
+data_CML_intà6 <- FindClusters(data_CML_intà6, resolution = 0.05)
+#head(Idents(data_CML_intà6), 5)
+# Les Umaps
+plotCML1<- DimPlot(data_CML_intà6, reduction="umap", label=TRUE, pt.size=0.5)+ 
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/Umap_CML_intà6_res005_apresPCA.jpg", plot = plotCML1, height = 7, width = 7, dpi = 100)
+
+```
+
+1) UMAP par échantillons chez les CML
+```{r}
+# plot des Echantillons Femelles wt et mutés
+# Avec le + coord_fixed() c'est pour bien centrere tous les images et qe tout apparaissent pareils 
+PLOTe <- DimPlot(
+  data_CML_intà6,
+  reduction = "umap",
+  group.by = "orig.ident"   # ou "orig.ident" si c’est là que l’info est stockée
+)+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_ensemble_des_échantillonse.jpg", plot = PLOTe, height = 7, width = 7, dpi = 300)
+
+plot2EFK <- DimPlot(
+  data_CML_intà6,
+  reduction = "umap",
+  cells.highlight = WhichCells(data_CML_intà6, expression = orig.ident == "B6_F_KI"),
+  cols.highlight = "red",
+  cols = "gray"
+)+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_échantillon_Femelle_KI_intà6.jpg", plot = plot2EFK, height = 7, width = 7, dpi = 300)
+
+plot2EFW<- DimPlot(data_CML_intà6, reduction = "umap", 
+  cells.highlight = WhichCells(data_CML_intà6, expression = orig.ident == "B6_F_WT"),
+        cols.highlight = c("blue"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_échantillon_Femelle_WT_intà6.jpg", plot = plot2EFW, height = 7, width = 7, dpi = 300)
+
+# plot des Echantillons males wt et mutés
+plot2EMK <- DimPlot(data_CML_intà6, reduction = "umap", 
+  cells.highlight = WhichCells(data_CML_intà6, expression = orig.ident == "B6_M_KI"), 
+        cols.highlight = c("green"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_échantillon_Male_KI_intà6.jpg", plot = plot2EMK, height = 7, width = 7, dpi = 300)
+
+plot2EMW <- DimPlot(data_CML_intà6, reduction = "umap", 
+  cells.highlight = WhichCells(data_CML_intà6, expression = orig.ident == "B6_M_WT"), 
+        cols.highlight = c("yellow"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_échantillon_Male_WT_intà6.jpg", plot = plot2EMW, height = 7, width = 7, dpi = 300)
+
+# plot des Echantillons males castrés wt et mutés
+plot2EMCK<- DimPlot(data_CML_intà6, reduction = "umap", 
+  cells.highlight = WhichCells(data_CML_intà6, expression = orig.ident == "B6_M_Ox_KI"), 
+        cols.highlight = c("pink"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_échantillon_Male_Castré_KI_intà6.jpg", plot = plot2EMCK, height = 7, width = 7, dpi = 300)
+
+plot2EMCW <- DimPlot(data_CML_intà6, reduction = "umap", 
+  cells.highlight = WhichCells(data_CML_intà6, expression = orig.ident == "B6_M_Ox_WT"),
+        cols.highlight = c("orange"), 
+        cols = "gray")+
+  coord_fixed() +
+  theme(aspect.ratio = 1) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/UMAP_CML_avec_échantillon_Male_Castré_WT_intà6.jpg", plot = plot2EMCW, height = 7, width = 7, dpi = 300)
+#saveRDS(data_CML_intà6, file="/home/afall/r-docker/Filtrage_soupx_doubletfinder/data_CML_inta6.rds")
+#data_CML_intà6 <- readRDS("/home/afall/r-docker/Filtrage_soupx_doubletfinder/data_CML_inta6.rds")
+```
+
+
+2) Dotplot de gène d'intéret dans la population des CML
+```{r}
+feat<- c("Mcam")
+dot <- DotPlot(data_CML_intà6, features = feat) + 
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
+# Sauvegarde correcte en PNG
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Demande_12_03_2026/Dotplot_expression_gène_intéret_chez_CML_intégrationà6_res05.png", plot = dot, width = 12, height = 7, dpi = 300)
+
+```
+
+3) Extration et analyse des DEG entre cluster des CML de l'intégration à 6 à la res 0.2 sur l'ensemble des 6 échantillons
+```{r}
+#BiocManager::install("org.Mm.eg.db")
+library(org.Mm.eg.db)
+library(enrichplot)
+library(msigdbr)
+library(fgsea)
+library(clusterProfiler)
+
+# Pour le cluster 0
+# Extraction de DEG
+deg_cluster0_CML_intà6 <- FindMarkers(
+  data_CML_intà6,
+  ident.1 = "0",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(deg_cluster0_CML_intà6,
+           #  "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/DEG_cluster0_CML_intà6_res02.xlsx",
+           #  rowNames = TRUE)  # Le fichier DEG_cluster0_CML_intà6.xlsx contient les DEG du cluster 0 obtenu en comparant le cluster 0 aux autres clusters (sauf le 0) de la population des CML 
+# Sélectionner les gènes significatifs du cluster
+deg_sig0 <- deg_cluster0_CML_intà6[
+  deg_cluster0_CML_intà6$p_val_adj < 0.05 &
+  abs(deg_cluster0_CML_intà6$avg_log2FC) > 0.5,
+]  
+genes0 <- rownames(deg_sig0) # genes0 ici pour dire les gènes du cluster 0
+genes0_df <- data.frame(Gene = genes0)
+#write.xlsx(
+  #genes0_df,
+  #"/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/DEG_cluster0_CML_res02_filtrésurpvalueetavglog2FC.xlsx",
+ # rowNames = TRUE
+#)
+
+## Analyse de DEG
+# Avec la base de donnée GO
+background_genes0 <- rownames(deg_cluster0_CML_intà6)
+ego <- enrichGO(
+  gene = genes0,
+  universe = background_genes0,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 300,
+  readable = TRUE
+)
+ego <- simplify(
+  ego,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego, showCategory = 6) + ggtitle("GO BP enrichment (cluster0_CML_intà6 vs les autres clusters)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/New_Dotplot_enrichGO_cluster0_CML_res02_commande_avancée_filtrageavgetpvalue.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Pour le cluster 1
+# Extraction de DEG
+deg_cluster1_CML_intà6 <- FindMarkers(
+  data_CML_intà6,
+  ident.1 = "1",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(deg_cluster1_CML_intà6,
+            # "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/DEG_cluster1_CML_intà6_res02.xlsx",
+             #rowNames = TRUE)  
+# Sélectionner les gènes significatifs du cluster
+deg_sig1<- deg_cluster1_CML_intà6[
+  deg_cluster1_CML_intà6$p_val_adj < 0.05 &
+  abs(deg_cluster1_CML_intà6$avg_log2FC) > 0.5,
+]  
+genes1 <- rownames(deg_sig1) 
+genes1_df <- data.frame(Gene = genes1)
+#write.xlsx(
+  #genes1_df,
+  #"/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/DEG_cluster1_CML_res02_filtrésurpvalueetavglog2FC.xlsx",
+  #rowNames = TRUE
+#)
+
+## Analyse de DEG
+# Avec la base de donnée GO
+background_genes1 <- rownames(deg_cluster1_CML_intà6)
+ego <- enrichGO(
+  gene = genes1,
+  universe = background_genes1,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 300,
+  readable = TRUE
+)
+ego <- simplify(
+  ego,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego, showCategory = 7) + ggtitle("GO BP enrichment (cluster1_CML_intà6 vs les autres clusters)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/New_Dotplot_enrichGO_cluster1_CML_res02_filtrésurpvalueetavglog2FC.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Analyse GSEA
+#install.packages("msigdbr")
+library(msigdbr)
+m_df <- msigdbr(species = "Mus musculus", category = "C2")
+pathways <- split(m_df$gene_symbol, m_df$gs_name)
+ranks <- deg_cluster1_CML_intà6$avg_log2FC
+names(ranks) <- rownames(deg_cluster1_CML_intà6)
+ranks <- sort(ranks, decreasing = TRUE)
+# run fgsea
+library(fgsea)
+fg <- fgsea(pathways = pathways, stats = ranks, nperm = 10000)
+head(fg[order(padj), ])
+# Visualisation
+top_fg <- fg[order(fg$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies 
+library(ggplot2)
+B1 <- ggplot(top_fg, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea), cluster1 CML",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_GSEA_CML/Barplot_enrich_GSEA_CML_Cluster1.png", plot = B1, width = 12, height = 7, dpi = 300)
+
+# Pour le cluster 2
+deg_cluster2_CML_intà6 <- FindMarkers(
+  data_CML_intà6,
+  ident.1 = "2",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(deg_cluster2_CML_intà6,
+             #"/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/DEG_cluster2_CML_intà6_res02.xlsx",
+             #rowNames = TRUE)  
+# Sélectionner les gènes significatifs du cluster
+deg_sig2<- deg_cluster2_CML_intà6[
+  deg_cluster2_CML_intà6$p_val_adj < 0.05 &
+  abs(deg_cluster2_CML_intà6$avg_log2FC) > 0.5,
+]  
+genes2 <- rownames(deg_sig2) 
+genes2_df <- data.frame(Gene = genes2)
+#write.xlsx(
+ # genes2_df,
+  #"/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/DEG_cluster2_CML_res02_filtrésurpvalueetavglog2FC.xlsx",
+  #rowNames = TRUE
+#)
+
+# Avec la base de donnée GO
+background_genes2 <- rownames(deg_cluster2_CML_intà6)
+ego <- enrichGO(
+  gene = genes2,
+  universe = background_genes2,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2,
+  minGSSize = 5,
+  maxGSSize = 500,
+  readable = TRUE
+)
+ego <- simplify(
+  ego,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego, showCategory = 10) + ggtitle("GO BP enrichment (cluster2_CML_intà6 vs les autres clusters)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_analysis_CML_TRUEVERSION/Dotplot_enrichGO_cluster2_CML_res02_intà6.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Analyse GSEA
+m_df <- msigdbr(species = "Mus musculus", category = "C2")
+pathways <- split(m_df$gene_symbol, m_df$gs_name)
+ranks2 <- deg_cluster2_CML_intà6$avg_log2FC
+names(ranks2) <- rownames(deg_cluster2_CML_intà6)
+ranks2 <- sort(ranks2, decreasing = TRUE)
+# run fgsea
+fg2 <- fgsea(pathways = pathways, stats = ranks2, nperm = 10000)
+head(fg2[order(padj), ])
+# Visualisation
+top_fg2 <- fg2[order(fg2$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies
+B2 <- ggplot(top_fg2, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea), cluster2 CML",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_GSEA_CML/Barplot_enrich_GSEA_CML_Cluster2.png", plot = B2, width = 12, height = 7, dpi = 300)
+
+# Pour le cluster 3
+deg_cluster3_CML_intà6 <- FindMarkers(
+  data_CML_intà6,
+  ident.1 = "3",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(deg_cluster3_CML_intà6,
+            # "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/DEG_cluster3_CML_intà6_res02.xlsx",
+            # rowNames = TRUE)  # Le fichier DEG_cluster3_CML_intà6.xlsx contient les DEG du cluster 3 obtenu en comparant le cluster 3 aux autres clusters (sauf le 3) de la population des CML 
+# Sélectionner les gènes significatifs du cluster
+deg_sig3 <- deg_cluster3_CML_intà6[
+  deg_cluster3_CML_intà6$p_val_adj < 0.05 &
+  abs(deg_cluster3_CML_intà6$avg_log2FC) > 0.5,
+]  
+genes3 <- rownames(deg_sig3) # genes3 ici pour dire les gènes du cluster 3
+genes3_df <- data.frame(Gene = genes3)
+#write.xlsx(
+ # genes3_df,
+ # "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/DEG_cluster3_CML_res02_filtrésurpvalueetavglog2FC.xlsx",
+#  rowNames = TRUE
+#)
+background_genes3 <- rownames(deg_cluster3_CML_intà6)
+ego <- enrichGO(
+  gene = genes3,
+  universe = background_genes3,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2,
+  minGSSize = 10,
+  maxGSSize = 500,
+  readable = TRUE
+)
+ego <- simplify(
+  ego,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+D <- dotplot(ego, showCategory = 6) + ggtitle("GO BP enrichment (cluster3_CML_intà6 vs les autres clusters)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/New_Dotplot_enrichGO_cluster3_CML_res02_filtrésurpvalueetavglog2FC.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Analyse GSEA
+ranks3 <- deg_cluster3_CML_intà6$avg_log2FC
+names(ranks3) <- rownames(deg_cluster3_CML_intà6)
+ranks3 <- sort(ranks3, decreasing = TRUE)
+# run fgsea
+fg3 <- fgsea(pathways = pathways, stats = ranks3, nperm = 10000)
+head(fg3[order(padj), ])
+# Visualisation
+top_fg3 <- fg3[order(fg3$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies
+B3 <- ggplot(top_fg3, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea), cluster3 CML",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_GSEA_CML/Barplot_enrich_GSEA_CML_Cluster3.png", plot = B3, width = 12, height = 7, dpi = 300)
+
+# Pour le cluster 4
+deg_cluster4_CML_intà6 <- FindMarkers(
+  data_CML_intà6,
+  ident.1 = "4",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+
+# Sélectionner les gènes significatifs du cluster
+deg_sig <- deg_cluster4_CML_intà6[
+  deg_cluster4_CML_intà6$p_val_adj < 0.05 &
+  abs(deg_cluster4_CML_intà6$avg_log2FC) > 0.5,
+]  # filtrage sur P_value et avg_log2FC
+genes4 <- rownames(deg_sig) # récupération du symbol des gènes du cluster 
+genes4_df <- data.frame(Gene = genes4)
+#write.xlsx(
+  #genes4_df,
+ # "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/DEG_cluster4_CML_res02_filtrésurpvalueetavglog2FC.xlsx",
+#  rowNames = TRUE
+#)
+
+background_genes4 <- rownames(deg_cluster4_CML_intà6)
+# Analyse d'enrichissement avec la base de donnée GO
+ego <- enrichGO(
+  gene = genes4,
+  universe = background_genes4,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 300,
+  readable = TRUE
+)
+ego <- simplify(
+  ego,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego, showCategory = 5) + ggtitle("GO BP enrichment (cluster4_CML_intà6 vs les autres clusters)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/Dotplot_enrichGO_cluster4_CML_res02_filtrageavgetpvalue.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Pour le cluster 5
+deg_cluster5_CML_intà6 <- FindMarkers(
+  data_CML_intà6,
+  ident.1 = "5",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(deg_cluster5_CML_intà6,
+           #  "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Umap_des_CML_TRUEVERSION/DEG_cluster5_CML_intà6_res02.xlsx",
+            # rowNames = TRUE)  
+# Sélectionner les gènes significatifs du cluster
+deg_sig5 <- deg_cluster5_CML_intà6[
+  deg_cluster5_CML_intà6$p_val_adj < 0.05 &
+  abs(deg_cluster5_CML_intà6$avg_log2FC) > 0.5,
+]  
+genes5 <- rownames(deg_sig5) 
+genes5_df <- data.frame(Gene = genes5)
+#write.xlsx(
+  #genes5_df,
+  #"/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/DEG_cluster5_CML_res02_filtrésurpvalueetavglog2FC.xlsx",
+  #rowNames = TRUE
+#)
+
+# Avec la base de donnée GO
+background_genes5 <- rownames(deg_cluster5_CML_intà6)
+ego <- enrichGO(
+  gene = genes5,
+  universe = background_genes5,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 300,
+  readable = TRUE
+)
+ego <- simplify(
+  ego,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego, showCategory = 10) + ggtitle("GO BP enrichment (cluster5_CML_intà6 vs les autres clusters)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_Analyse_Pathway_CML_res02_avec_filtrage_spécifique_descommandes/New_Dotplot_enrichGO_cluster5_CML_res02_filtrésurpvalueetavglog2FC.png", plot = D, width = 12, height = 7, dpi = 300)
+```
+
+############ Analyse des pathways en comparant KI vs WT pour chacune des 6 conditions
+1) Pour les femelles
+```{r}
+# Extraction des échantillons femelles
+dataF_CML <- subset(data_CML_intà6, subset = orig.ident %in% c("B6_F_WT", "B6_F_KI"))
+#dataF_CML  # les CML ici sont à la res 0.2. Résolution sur laquelle nous continuons nos analyses.
+#table(dataF_CML$orig.ident)
+
+# Extraction de DEG exprimés entre KI et WT (chez les femelles)
+dataF_CML$genotype <- ifelse(grepl("WT", dataF_CML$orig.ident), "WT", "KI")
+#table(dataF_CML$genotype)
+Idents(dataF_CML) <- "genotype"  
+levels(Idents(dataF_CML))
+markers_femelle_CML_KI_vs_WT <- FindMarkers(
+  dataF_CML,
+  ident.1 = "KI",
+  ident.2 = "WT",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(markers_femelle_CML_KI_vs_WT, "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/DEG_CML_Femelle_KI_vs_WT.xlsx", rowNames = TRUE)
+
+library(ggrepel)
+markers_femelle_CML_KI_vs_WT$gene <- rownames(markers_femelle_CML_KI_vs_WT)
+
+# Création colonne "signification" selon les seuils
+markers_femelle_CML_KI_vs_WT$signification <- "NS"
+markers_femelle_CML_KI_vs_WT$signification[markers_femelle_CML_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_femelle_CML_KI_vs_WT$avg_log2FC > 0.25] <- "Up in KI"
+markers_femelle_CML_KI_vs_WT$signification[markers_femelle_CML_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_femelle_CML_KI_vs_WT$avg_log2FC < -0.25] <- "Up in WT"
+# Sélectionner les gènes à annoter (les 20 plus différentiels)
+genes_to_label <- subset(markers_femelle_CML_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+genes_to_label <- genes_to_label[order(abs(genes_to_label$avg_log2FC), decreasing = TRUE), ][1:20, ]
+# Tous les points = markers_femelle_CML_KI_vs_WT
+ volcano <- ggplot(markers_femelle_CML_KI_vs_WT, aes(x = avg_log2FC, y = -log10(p_val_adj), color = signification)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  
+  # Annotations = seulement diff_genes
+ geom_text_repel(data = genes_to_label, aes(label = gene), size = 3, max.overlaps = 20) +
+  
+  scale_color_manual(values = c("Up in KI" = "red", "Up in WT" = "blue", "NS" = "grey70")) +
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(title = "Volcano plot: KI vs WT (CML Femelle)",
+       x = "log2 Fold Change",
+       y = "-log10(p_adj)") +
+  theme_classic(base_size = 14)
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Volcano_CML_femelle_KIvsWT.png", plot = volcano, width = 12, height = 7, dpi = 300)
+```
+
+1) a)Analyse de DEG chez les femelles
+```{r}
+### PATHWAY
+library(enrichplot)
+library(msigdbr)
+
+# Récupérer la liste de gènes différentiellements exprimés 
+sigF <- subset(markers_femelle_CML_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+#sigF   # Filtrage sur marqueurs des femelles
+genes_sym <- rownames(sigF) # récupération du symbol des gènes 
+# Conversion des identifiants d'entrée (ici nous transformons les gènes en indentifiants d'entrée c'est à dire des chiffres)
+conv <- bitr(rownames(markers_femelle_CML_KI_vs_WT), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+genes_or_entrezF <- conv$ENTREZID[conv$SYMBOL %in% genes_sym]
+universe_entrez <- conv$ENTREZID
+
+ego_all <- enrichGO(
+  gene = genes_or_entrezF,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 300,
+  readable = TRUE
+)
+ego_all <- simplify(
+  ego_all,
+  cutoff = 0.6,
+  by = "p.adjust",
+  select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego_all, showCategory = 20) + ggtitle("GO BP enrichment (CML femelles, KI vs WT)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Dotplot_enrichGo_CML_femelle_KIvsWT.png", plot = D, width = 12, height = 7, dpi = 300)
+
+library(ReactomePA)
+ereact <- enrichPathway(gene = genes_or_entrezF, organism="mouse", pvalueCutoff = 0.01, qvalueCutoff = 0.05)
+B <- barplot(ereact, showCategory= 4) + ggtitle(" REACTOME enrichment (CML Femelles, KI vs WT)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Barplot_enrich_REACTOME_CML_femelle_KIvsWT.png", plot = B, width = 12, height = 7, dpi = 300)
+
+# Analyse GSEA des femelles
+ranksF <- markers_femelle_CML_KI_vs_WT$avg_log2FC
+names(ranksF) <- rownames(markers_femelle_CML_KI_vs_WT)
+ranksF <- sort(ranksF, decreasing = TRUE)
+# run fgsea
+fgF <- fgsea(pathways = pathways, stats = ranksF, nperm = 10000)
+head(fgF[order(padj), ])
+# Visualisation
+top_fgF <- fgF[order(fgF$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies
+BF <- ggplot(top_fgF, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea), CML Femelles",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_GSEA_CML/Barplot_enrich_GSEA_CML_Femelles.png", plot = BF, width = 12, height = 7, dpi = 300)
+```
+
+2) Pour les males 
+```{r}
+# Extraction des échantillons males
+dataM_CML <- subset(data_CML_intà6, subset = orig.ident %in% c("B6_M_WT", "B6_M_KI"))
+#table(dataM_CML$orig.ident)
+
+# Extraction de DEG exprimés entre KI et WT (chez les males)
+dataM_CML$genotype <- ifelse(grepl("WT", dataM_CML$orig.ident), "WT", "KI")
+#table(dataM_CML$genotype)
+Idents(dataM_CML) <- "genotype"  
+#levels(Idents(dataM_CML))
+markers_male_CML_KI_vs_WT <- FindMarkers(
+  dataM_CML,
+  ident.1 = "KI",
+  ident.2 = "WT",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(markers_male_CML_KI_vs_WT, "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/DEG_CML_male_KI_vs_WT.xlsx", rowNames = TRUE)
+
+library(ggrepel)
+markers_male_CML_KI_vs_WT$gene <- rownames(markers_male_CML_KI_vs_WT)
+
+# Création colonne "signification" selon les seuils
+markers_male_CML_KI_vs_WT$signification <- "NS"
+markers_male_CML_KI_vs_WT$signification[markers_male_CML_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_male_CML_KI_vs_WT$avg_log2FC > 0.25] <- "Up in KI"
+markers_male_CML_KI_vs_WT$signification[markers_male_CML_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_male_CML_KI_vs_WT$avg_log2FC < -0.25] <- "Up in WT"
+# Sélectionner les gènes à annoter (les 20 plus différentiels)
+genes_to_label <- subset(markers_male_CML_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+genes_to_label <- genes_to_label[order(abs(genes_to_label$avg_log2FC), decreasing = TRUE), ][1:20, ]
+# Tous les points = markers_male_CML_KI_vs_WT
+ volcano <- ggplot(markers_male_CML_KI_vs_WT, aes(x = avg_log2FC, y = -log10(p_val_adj), color = signification)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  
+  # Annotations = seulement diff_genes
+ geom_text_repel(data = genes_to_label, aes(label = gene), size = 3, max.overlaps = 20) +
+  
+  scale_color_manual(values = c("Up in KI" = "red", "Up in WT" = "blue", "NS" = "grey70")) +
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(title = "Volcano plot: KI vs WT (CML male)",
+       x = "log2 Fold Change",
+       y = "-log10(p_adj)") +
+  theme_classic(base_size = 14)
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Volcano_CML_male_KIvsWT.png", plot = volcano, width = 12, height = 7, dpi = 300)
+
+```
+
+2) a)Analyse de DEG chez les males
+```{r}
+# Récupérer la liste de gènes différentiellements exprimés 
+sigM <- subset(markers_male_CML_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+genes_sym <- rownames(sigM) # récupération du symbol des gènes 
+# Conversion des identifiants d'entrée ( ici nous transformons les gènes en indentifiants d'entrée c'est à dire des chiffres)
+conv <- bitr(rownames(markers_male_CML_KI_vs_WT), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+genes_or_entrezM <- conv$ENTREZID[conv$SYMBOL %in% genes_sym]
+universe_entrez <- conv$ENTREZID
+
+ego_all <- enrichGO(
+  gene = genes_or_entrezM,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 500,
+  readable = TRUE
+)
+#ego_all <- simplify(
+ #ego_all,
+ #cutoff = 0.6,
+ #by = "p.adjust",
+ #select_fun = min
+#)
+# Visualisation 
+D <- dotplot(ego_all, showCategory = 8) + ggtitle("GO BP enrichment (CML males, KI vs WT)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Dotplot_enrichGo_CML_male_KIvsWT.png", plot = D, width = 12, height = 7, dpi = 300)
+# Analyse avec REACTOME
+ereact <- enrichPathway(gene = genes_or_entrezM, organism="mouse", pvalueCutoff = 0.01, qvalueCutoff = 0.05)
+B <- barplot(ereact, showCategory= 4) + ggtitle(" REACTOME enrichment (CML males, KI vs WT)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Barplot_enrich_REACTOME_CML_male_KIvsWT.png", plot = B, width = 12, height = 7, dpi = 300)
+
+# Analyse GSEA des males
+ranksM <- markers_male_CML_KI_vs_WT$avg_log2FC
+names(ranksM) <- rownames(markers_male_CML_KI_vs_WT)
+ranksM <- sort(ranksM, decreasing = TRUE)
+# run fgsea
+fgM <- fgsea(pathways = pathways, stats = ranksM, nperm = 10000)
+head(fgM[order(padj), ])
+# Visualisation
+top_fgM <- fgM[order(fgM$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies
+BM <- ggplot(top_fgM, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea), CML males",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_GSEA_CML/Barplot_enrich_GSEA_CML_males.png", plot = BM, width = 12, height = 7, dpi = 300)
+```
+
+3) Pour les males castrés 
+```{r}
+# Extraction des échantillons males castrés
+dataMC_CML <- subset(data_CML_intà6, subset = orig.ident %in% c("B6_M_Ox_WT", "B6_M_Ox_KI"))
+#table(dataMC_CML$orig.ident)
+
+# Extraction de DEG exprimés entre KI et WT (chez les males)
+dataMC_CML$genotype <- ifelse(grepl("WT", dataMC_CML$orig.ident), "WT", "KI")
+#table(dataMC_CML$genotype)
+Idents(dataMC_CML) <- "genotype"  
+#levels(Idents(dataMC_CML))
+markers_malecastre_CML_KI_vs_WT <- FindMarkers(
+  dataMC_CML,
+  ident.1 = "KI",
+  ident.2 = "WT",
+  logfc.threshold = 0.25,
+  min.pct = 0.1
+)
+#write.xlsx(markers_malecastre_CML_KI_vs_WT, "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/DEG_CML_malecastre_KI_vs_WT.xlsx", rowNames = TRUE)
+
+markers_malecastre_CML_KI_vs_WT$gene <- rownames(markers_malecastre_CML_KI_vs_WT)
+
+# Création colonne "signification" selon les seuils
+markers_malecastre_CML_KI_vs_WT$signification <- "NS"
+markers_malecastre_CML_KI_vs_WT$signification[markers_malecastre_CML_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_malecastre_CML_KI_vs_WT$avg_log2FC > 0.25] <- "Up in KI"
+markers_malecastre_CML_KI_vs_WT$signification[markers_malecastre_CML_KI_vs_WT$p_val_adj < 0.05 &
+                                   markers_malecastre_CML_KI_vs_WT$avg_log2FC < -0.25] <- "Up in WT"
+# Sélectionner les gènes à annoter (les 20 plus différentiels)
+genes_to_label <- subset(markers_malecastre_CML_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+genes_to_label <- genes_to_label[order(abs(genes_to_label$avg_log2FC), decreasing = TRUE), ][1:20, ]
+# Tous les points = markers_malecastre_CML_KI_vs_WT
+ volcano <- ggplot(markers_malecastre_CML_KI_vs_WT, aes(x = avg_log2FC, y = -log10(p_val_adj), color = signification)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  
+  # Annotations = seulement diff_genes
+ geom_text_repel(data = genes_to_label, aes(label = gene), size = 3, max.overlaps = 20) +
+  
+  scale_color_manual(values = c("Up in KI" = "red", "Up in WT" = "blue", "NS" = "grey70")) +
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(title = "Volcano plot: KI vs WT (CML male castré)",
+       x = "log2 Fold Change",
+       y = "-log10(p_adj)") +
+  theme_classic(base_size = 14)
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Volcano_CML_malecastre_KIvsWT.png", plot = volcano, width = 12, height = 7, dpi = 300)
+```
+
+3) a)Analyse de DEG chez les males castrés
+```{r}
+# Récupérer la liste de gènes différentiellements exprimés 
+sigMC <- subset(markers_malecastre_CML_KI_vs_WT, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+genes_sym <- rownames(sigMC) # récupération du symbol des gènes 
+# Conversion des identifiants d'entrée ( ici nous transformons les gènes en indentifiants d'entrée c'est à dire des chiffres)
+conv <- bitr(rownames(markers_malecastre_CML_KI_vs_WT), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Mm.eg.db")
+genes_or_entrezMC <- conv$ENTREZID[conv$SYMBOL %in% genes_sym]
+universe_entrez <- conv$ENTREZID
+
+ego_all <- enrichGO(
+  gene = genes_or_entrezMC,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID",
+  ont = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05,
+  minGSSize = 10,
+  maxGSSize = 300,
+  readable = TRUE
+)
+ego_all <- simplify(
+ ego_all,
+ cutoff = 0.6,
+ by = "p.adjust",
+ select_fun = min
+)
+# Visualisation 
+D <- dotplot(ego_all, showCategory = 9) + ggtitle("GO BP enrichment (CML males castrés, KI vs WT)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Dotplot_enrichGo_CML_malecastre_KIvsWT.png", plot = D, width = 12, height = 7, dpi = 300)
+
+# Analyse avec REACTOME
+ereact <- enrichPathway(gene = genes_or_entrezMC, organism="mouse", pvalueCutoff = 0.01, qvalueCutoff = 0.05)
+B <- barplot(ereact, showCategory= 7) + ggtitle(" REACTOME enrichment (CML males castrés, KI vs WT)")
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_pathway_comparaisonKIvsWT_parcondition/Barplot_enrich_REACTOME_CML_malecastre_KIvsWT.png", plot = B, width = 12, height = 7, dpi = 300)
+
+# Analyse GSEA des males castrés
+ranksMC <- markers_malecastre_CML_KI_vs_WT$avg_log2FC
+names(ranksMC) <- rownames(markers_malecastre_CML_KI_vs_WT)
+ranksMC <- sort(ranksMC, decreasing = TRUE)
+# run fgsea
+fgMC <- fgsea(pathways = pathways, stats = ranksMC, nperm = 10000)
+head(fgMC[order(padj), ])
+# Visualisation
+top_fgMC <- fgMC[order(fgMC$padj), ][1:20, ]  # top 20: les 20 pathways les plus enrichies
+BMC <- ggplot(top_fgMC, aes(x = reorder(pathway, NES), y = NES, fill = padj)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(low = "red", high = "blue", name = "padj") +
+  labs(title = "Top 20 pathways enrichis (GSEA - fgsea), CML males castrés",
+       x = "Pathway", y = "Normalized Enrichment Score (NES)") +
+  theme_classic()
+#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Analyse_GSEA_CML/Barplot_enrich_GSEA_CML_males_castres.png", plot = BMC, width = 12, height = 7, dpi = 300)
+```
