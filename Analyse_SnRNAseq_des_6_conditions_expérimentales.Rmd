@@ -16,8 +16,8 @@ library(dplyr)
 #install.packages('Seurat')
 #install.packages("remotes")
 library(Seurat)
-packageVersion("Seurat")
-packageVersion("SeuratObject")
+#packageVersion("Seurat")
+#packageVersion("SeuratObject")
 library(patchwork)
 options(future.globals.maxSize = 1e9)
 #install.packages('SeuratObject')
@@ -127,25 +127,33 @@ plotU3<- DimPlot(data.integrated2, reduction="umap", label=TRUE, pt.size=0.5)
 #data.integrated2 <- readRDS("/home/afall/r-docker/Filtrage_soupx_doubletfinder/dataintegrated2_intà6_sBalbc.rds")
 ```
 
-1) Extraction de nombre de noyaux par cluster 
+1) Extraction du nombre et pourcentage de noyaux par cluster 
 ```{r}
-tb <- table(Idents(data.integrated2))
-df <- as.data.frame(tb)
-colnames(df) <- c("Cluster", "Noyaux")
-#write.table(tb, file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Nbre_noyau_par_cluster_Sbalbc.txt",
-           # sep = "\t", quote = FALSE, col.names = NA)
+data.integrated2
+# Nbre de noyau par cluster et par condition expérimentale pour data.integrated2
+Tg <- table(data.integrated2@meta.data$seurat_clusters,
+            data.integrated2@meta.data$orig.ident)
+df1 <- as.data.frame.matrix(Tg)  
+df1 <- tibble::rownames_to_column(df1, var = "Cluster")
+#write.xlsx(df1,
+         #file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Nbre_et_pourcentage_noyaux_par_cluster_et_par_condition/Noyaux_par_cluster_et_par_condition_dataintegrated_sbalbc.xlsx",
+          #rowNames = FALSE)
 
-# Créer un graphique avec ggplot2
-p <- ggplot(df, aes(x = Cluster, y = Noyaux)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  theme_minimal() +
-  labs(title = "Nombre de noyaux par cluster",
-       x = "Cluster",
-       y = "Nombre de noyaux")
+# Nombre et pourcentage de noyaux par cluster et par conditions
+Tg_pct <- prop.table(Tg, margin = 2)
+df1_n   <- as.data.frame.matrix(Tg)
+df1_pct <- as.data.frame.matrix(Tg_pct)
+Tg_final <- data.frame(
+  Cluster = rownames(df1_n)
+)
 
-# Sauvegarder le graphique
-#ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Réprésentation_nbre_noyau_par_cluster_Sbalbc.jpg",
-      # plot = p, height = 7, width = 7, dpi = 100)
+for (cond in colnames(df1_n)) {
+  Tg_final[[paste0(cond, "_n")]]   <- df1_n[[cond]]
+  Tg_final[[paste0(cond, "_pct")]] <- df1_pct[[cond]]
+}
+#write.xlsx(Tg_final,
+          #file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Nbre_et_pourcentage_noyaux_par_cluster_et_par_condition/Nbre_et_pourcentage_de_noyaux_par_cluster_et_par_condition_dataintegrated_sbalbc.xlsx",
+         #rowNames = FALSE)
 ```
 
 ##### Extraction des gènes marqueurs
@@ -455,6 +463,7 @@ new.cluster.ids <- c("Vascular smooth muscle cells", "Metabolically active cells
 names(new.cluster.ids) <- levels(data.integrated2) 
 #names(new.cluster.ids) # FONCTION CRÉER qui contient tout nos cluster ID
 data.integrated2 <- RenameIdents(data.integrated2, new.cluster.ids)
+data.integrated2 
 #PLOT<- DimPlot(data.integrated2, reduction="umap", label = FALSE, pt.size = 0.5)
 #PLOT
 # La nouvelle commande de plot qui suit sert à center mon umap
@@ -616,6 +625,7 @@ data.filtered <- subset(
     c("1", "4", "6")
   )
 )
+data.filtered
 Idents(data.filtered)="celltype"
 features<- c("Clec3b",	"Cygb",	"Dcn", "Gsn", "Pi16", "Acta2",	"Cnn1", "Flna", "Myh11", "Tagln", "Cdh5", "Cldn5", "Esam", "Pecam1", "Vwf", "Flt4", "Mmrn1", "Prox1", "C1qa", "Cd74", "H2-Ab1", "Lyz2", "Ptprc", "Kcnj8", "Notch3", "Rgs5", "Msln", "Wt1", "Gfra3", "Plp1", "Sox10")
 dot <- DotPlot(data.filtered, features = features) + 
@@ -623,6 +633,33 @@ dot <- DotPlot(data.filtered, features = features) +
   theme(axis.text.x = element_text(angle = 80, hjust = 1, vjust = 1, margin = margin(t = 5)))
 # Sauvegarde correcte en PNG
 #ggsave(filename = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/New_analyse_après_vac_27_03_2026/New2_Dotplot_marqueurs_intà6.tiff", plot = dot, width = 12, height = 7, dpi = 300)
+
+### Nbre de noyau par cluster et par condition expérimentale pour data.filtered
+colnames(data.filtered@meta.data)
+Tf <- table(data.filtered@meta.data$seurat_clusters,
+            data.filtered@meta.data$orig.ident)
+df2 <- as.data.frame.matrix(Tf)  
+df2 <- tibble::rownames_to_column(df2, var = "Cluster")
+#write.xlsx(df2,
+         #file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Nbre_et_pourcentage_noyaux_par_cluster_et_par_condition/Noyaux_par_cluster_et_par_condition_datafiltered_sanscluster146.xlsx",
+          #rowNames = FALSE)
+
+# Nombre et pourcentage de noyaux par cluster et par conditions
+Tf_pct <- prop.table(Tf, margin = 2)
+df2_n   <- as.data.frame.matrix(Tf)
+df2_pct <- as.data.frame.matrix(Tf_pct)
+Tf_final <- data.frame(
+  Cluster = rownames(df2_n)
+)
+
+for (cond in colnames(df2_n)) {
+  Tf_final[[paste0(cond, "_n")]]   <- df2_n[[cond]]
+  Tf_final[[paste0(cond, "_pct")]] <- df2_pct[[cond]]
+}
+#write.xlsx(Tf_final,
+          #file = "/home/afall/r-docker/Analyses_SnRNA_10_2025/Sans_Balbc/Version_nautilus/Analyses_SnRNA_01_2026/Nbre_et_pourcentage_noyaux_par_cluster_et_par_condition/Nbre_et_pourcentage_de_noyaux_par_cluster_et_par_condition_datafiltered_sanscluster146.xlsx",
+        # rowNames = FALSE)
+
 #saveRDS(data.filtered, file="/home/afall/r-docker/Filtrage_soupx_doubletfinder/datafiltered_sanscluster146.rds")
 #data.filtered <- readRDS("/home/afall/r-docker/Filtrage_soupx_doubletfinder/datafiltered_sanscluster146.rds")
 ```
