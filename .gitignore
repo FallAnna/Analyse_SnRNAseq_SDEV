@@ -1,13 +1,2 @@
-*.Robj
 *.rds
 .Rhistory
-Analyse_modules_Xavier.R
-Analyses_différentielles_des_données.Rmd
-Intégration_2à2_échantillons.Rmd
-Intégration_données_Bl6M_vs_Bl6Mox.Rmd
-Intégration_données_Bl6g_vs_Balbc.Rmd
-Intégration_données_Seurat_Balbc.Rmd
-Intégration_données_Seurat_diff_résolution.Rmd
-Intégration_données_Seurat_new.Rmd
-Intégrationà6_ sbalbc_pour_article.Rmd
-New_Analyse_CML_res02_filtrage_approfondit.Rmd
